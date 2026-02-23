@@ -221,7 +221,7 @@ function Handler:initialize_export_context(gui)
 	end
 	msg.info("Cleaned sub hex: " .. hex_dump)
 
-	return {
+	local context = {
 		sub = Collections.duplicate(sub),
 		first_subtitle = Collections.duplicate(sub),
 		last_subtitle = Collections.duplicate(sub),
@@ -231,6 +231,12 @@ function Handler:initialize_export_context(gui)
 		history_was_open = history_was_open,
 		gui = gui,
 	}
+
+	if self.manual_start and self.manual_end then
+		self:apply_manual_range(context)
+	end
+
+	return context
 end
 
 function Handler:start_selector_flow(context, was_paused)
@@ -301,6 +307,8 @@ function Handler:handle_selector_result(context, selected_token)
 
 	if not selected_token then
 		msg.info("Selector cancelled")
+		self.manual_start = nil
+		self.manual_end = nil
 		return
 	end
 
@@ -822,6 +830,8 @@ function Handler:new()
 		active_entry_reading = nil,
 		pending_lookup_term = nil,
 		pending_lookup_reading = nil,
+		manual_start = nil,
+		manual_end = nil,
 	}
 	setmetatable(obj, self)
 	self.__index = self
@@ -830,6 +840,68 @@ end
 
 function Handler:sync_selection(text)
 	self.last_selection = text ~= "" and text or nil
+end
+
+function Handler:set_manual_start()
+	local pos = mp.get_property_number("time-pos")
+	if not pos then
+		return
+	end
+	self.manual_start = pos
+	Player.notify(string.format("Start: %s", StringOps.format_duration(pos, true)), "info", 2)
+end
+
+function Handler:set_manual_end()
+	local pos = mp.get_property_number("time-pos")
+	if not pos then
+		return
+	end
+	self.manual_end = pos
+	Player.notify(string.format("End: %s", StringOps.format_duration(pos, true)), "info", 2)
+end
+
+function Handler:clear_manual_timings()
+	self.manual_start = nil
+	self.manual_end = nil
+	Player.notify("Timings cleared", "info", 2)
+end
+
+function Handler:apply_manual_range(context)
+	local history = self.deps.tracker.get_synchronized_history()
+	if not history or #history == 0 then
+		return
+	end
+
+	local collected = {}
+	for _, entry in ipairs(history) do
+		if entry["end"] > self.manual_start and entry.start < self.manual_end then
+			table.insert(collected, entry)
+		end
+	end
+
+	if #collected == 0 then
+		return
+	end
+
+	local combined_primary = ""
+	local combined_secondary = ""
+	for i, entry in ipairs(collected) do
+		if i > 1 then
+			combined_primary = combined_primary .. "\n"
+			combined_secondary = combined_secondary .. "\n"
+		end
+		combined_primary = combined_primary .. StringOps.clean_subtitle(entry.primary_sid or "", true)
+		combined_secondary = combined_secondary .. StringOps.clean_subtitle(entry.secondary_sid or "", true)
+	end
+
+	context.sub.primary_sid = combined_primary
+	context.sub.secondary_sid = combined_secondary
+	context.sub.start = self.manual_start
+	context.sub["end"] = self.manual_end
+	context.current_subtitle_text = combined_primary
+	context.first_subtitle = Collections.duplicate(collected[1])
+	context.last_subtitle = Collections.duplicate(collected[#collected])
+	context.expansion_occurred = #collected > 1
 end
 
 function Handler:perform_anki_save(_context, note_fields)
@@ -852,6 +924,8 @@ function Handler:perform_anki_save(_context, note_fields)
 			else
 				msg.info("Note added successfully: " .. tostring(note_id))
 				Player.notify("Note added to Anki!", "success", 2)
+				self.manual_start = nil
+				self.manual_end = nil
 				self.deps.anki:gui_browse("nid:" .. tostring(note_id), function() end)
 			end
 		end
@@ -886,6 +960,9 @@ function Handler:handle_duplicate_note(note_fields, _error_msg)
 	end
 
 	msg.info("Duplicate search query: " .. query)
+
+	self.manual_start = nil
+	self.manual_end = nil
 
 	self.deps.anki:find_notes(query, function(note_ids, error)
 		if error or not note_ids or #note_ids == 0 then

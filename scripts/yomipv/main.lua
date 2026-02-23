@@ -174,6 +174,24 @@ if config.key_toggle_picture_animated ~= "" then
 	end)
 end
 
+if config.key_set_timing_start ~= "" then
+	mp.add_key_binding(config.key_set_timing_start, "yomipv-set-timing-start", function()
+		handler:set_manual_start()
+	end)
+end
+
+if config.key_set_timing_end ~= "" then
+	mp.add_key_binding(config.key_set_timing_end, "yomipv-set-timing-end", function()
+		handler:set_manual_end()
+	end)
+end
+
+if config.key_clear_timings ~= "" then
+	mp.add_key_binding(config.key_clear_timings, "yomipv-clear-timings", function()
+		handler:clear_manual_timings()
+	end)
+end
+
 mp.register_script_message("yomipv-sync-selection", function(text)
 	msg.info("Received selection sync: " .. tostring(text))
 	handler:sync_selection(text)

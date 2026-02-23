@@ -176,6 +176,9 @@ local default_options = {
 	key_selection_prev = "Ctrl+LEFT",
 	key_selector_lookup = "Ctrl+c",
 	key_append_mode = "C",
+	key_set_timing_start = "",
+	key_set_timing_end = "",
+	key_clear_timings = "",
 	lookup_app_path = "lookup-app",
 
 	--[[ History settings ]]
