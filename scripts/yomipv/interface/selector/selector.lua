@@ -22,6 +22,7 @@ local Selector = {
 	registered_keys = {}, -- Binding track for cleanup
 	split_history = {}, -- Undo stack
 	selection_len = 1,
+	sub_visibility_before = "yes",
 }
 
 -- UTF-8 Iterator polyfill
@@ -100,7 +101,7 @@ function Selector:clear()
 	end
 	mp.unobserve_property(render_cb)
 	mp.set_osd_ass(0, 0, "")
-	mp.set_property("sub-visibility", "yes")
+	mp.set_property("sub-visibility", self.sub_visibility_before)
 
 	Interaction.unbind(self)
 
@@ -343,6 +344,7 @@ function Selector:start(tokens, callback, style)
 	end
 	self.callback = callback
 
+	self.sub_visibility_before = mp.get_property("sub-visibility", "yes")
 	mp.set_property("sub-visibility", "no")
 
 	-- Interface pause logic
