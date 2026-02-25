@@ -4,22 +4,23 @@ The Lookup App is an interactive overlay that displays dictionary definitions, p
 
 ## How it Works
 
-The lookup window appears when you search for a word. Depending on your configuration, this can happen manually or automatically.
+The lookup window appears when you search for a word. Depending on your configuration, this can happen automatically or manually.
 
+- **Automatic Lookup**: Can be disabled in your settings (`selector_lookup_on_hover`).
+  - `selector_lookup_on_navigation` can also be enabled to trigger a lookup when navigating through the selector using Left/Right arrow keys.
 - **Manual Lookup**: Press `Ctrl+c` (default) while hovering over a word in the selector.
-- **Automatic Lookup**: Can be enabled in your settings (`selector_lookup_on_hover` or `selector_lookup_on_navigation`).
 
-The window stays on top of MPV.
+The window stays on top of MPV until the selector is confirmed or cancelled. 
+Right-click to lock the window, preventing accidental changes when the cursor moves over another word in the selector.
 
 ### Navigating Multiple Results
 If a word has multiple entries, you will see a counter (like `1 / 3`) at the top.
 - Click the Left/Right buttons of the lookup window to cycle through different entries.
 
 ### Sub-word Lookups
-You can perform a new search directly from the lookup window's header.
-- **Click any character** in the word at the top to start a new lookup from that position.
-
-### Navigation History
+With `selector_lookup_on_hover` (enabled by default) and `selector_lookup_on_navigation`, you can open the lookup for sub-words directly from the subtitle.
+You can also start a new search directly from the lookup window header:
+- **Click any mora** in the headword to begin a new lookup from that position.
 - **Right-click the header** to go back to the previous word you were looking at.
 
 ## Working with Definitions

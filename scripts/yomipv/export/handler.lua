@@ -333,9 +333,9 @@ function Handler:handle_selector_result(context, selected_token)
 		)
 	)
 
-	-- Use pending term as fallback if active-entry IPC hasn't arrived yet
-	local effective_expr = self.active_entry_expression or self.pending_lookup_term
-	local effective_reading = self.active_entry_reading or self.pending_lookup_reading
+	-- Only pins an entry when the UI has explicitly synced one
+	local effective_expr = self.active_entry_expression
+	local effective_reading = self.active_entry_reading
 
 	self.deps.yomitan:get_anki_fields(selected_token.text, yomitan_fields, {
 		text = context.current_subtitle_text,
@@ -726,10 +726,13 @@ function Handler:build_selector_style(update_range_fn, was_paused)
 		key_selection_next = self.config.key_selection_next,
 		key_selection_prev = self.config.key_selection_prev,
 		key_lookup = self.config.key_selector_lookup,
-		key_split = self.config.key_selector_split,
+
 		navigation_delay = self.config.selector_navigation_delay,
 		lookup_on_hover = self.config.selector_lookup_on_hover,
 		lookup_on_navigation = self.config.selector_lookup_on_navigation,
+		lookup_delay = self.config.selector_lookup_delay,
+		selector_mora_hover = self.config.selector_mora_hover,
+		selector_mora_navigation = self.config.selector_mora_navigation,
 		yomitan = self.deps.yomitan,
 		on_expand_prev = function()
 			update_range_fn(-1)

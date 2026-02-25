@@ -4,6 +4,7 @@ const http = require('http');
 const net = require('net');
 
 let mainWindow;
+let pendingHide = false;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -86,9 +87,12 @@ app.whenReady().then(() => {
         }
 
         if (req.url === '/hide') {
-          console.log('[IPC] Hide signal received');
-          res.end('hidden');
-          mainWindow.hide();
+          console.log('[IPC] Hide signal received, requesting renderer clear');
+          res.end('hiding');
+          if (mainWindow) {
+            pendingHide = true;
+            mainWindow.webContents.send('window-hide-request');
+          }
           return;
         }
 
@@ -96,8 +100,10 @@ app.whenReady().then(() => {
           const data = JSON.parse(body);
           if (data.term) {
             console.log('[IPC] Lookup for:', data.term);
-            mainWindow.webContents.send('lookup-term', data);
-            mainWindow.showInactive();
+            pendingHide = false;
+            if (mainWindow) {
+              mainWindow.webContents.send('lookup-term', data);
+            }
           }
         } catch (e) {
           console.error('Failed to parse request body', e);
@@ -128,7 +134,6 @@ app.whenReady().then(() => {
     console.log(`[INFO] Monitoring parent PID: ${parentPid}`);
     setInterval(() => {
       try {
-        // process.kill(pid, 0) throws if the process doesn't exist
         process.kill(parentPid, 0);
       } catch (e) {
         console.log('[INFO] Parent process died, shutting down...');
@@ -138,7 +143,7 @@ app.whenReady().then(() => {
         }
         app.quit();
       }
-    }, 500); // Check more frequently to release IPC pipe fast
+    }, 500);
   }
 });
 
@@ -176,5 +181,26 @@ ipcMain.on('active-entry', (event, data) => {
   if (mpvIpc && data) {
     const cmd = { command: ['script-message', 'yomipv-active-entry', data.expression || '', data.reading || ''] };
     mpvIpc.write(JSON.stringify(cmd) + '\n');
+  }
+});
+
+ipcMain.on('show-window', () => {
+  if (mainWindow) {
+    console.log('[IPC] show-window signal received');
+    pendingHide = false;
+    if (!mainWindow.isVisible()) {
+      console.log('[IPC] window is hidden, showing inactive');
+      mainWindow.showInactive();
+    }
+  }
+});
+
+ipcMain.on('window-hide-confirmed', () => {
+  if (mainWindow && pendingHide) {
+    console.log('[IPC] Hide confirmed by renderer, hiding window');
+    mainWindow.hide();
+    pendingHide = false;
+  } else {
+    console.log('[IPC] Hide confirmed but ignored (new lookup pending)');
   }
 });

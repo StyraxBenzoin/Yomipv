@@ -52,6 +52,16 @@ body {
   display: flex;
   flex-direction: column;
   backdrop-filter: blur(12px);
+  opacity: 0;
+  transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#lookup-container.visible {
+  opacity: 1;
+}
+
+#lookup-container.no-transition {
+  transition: none !important;
 }
 
 #scroll-content {

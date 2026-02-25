@@ -10,7 +10,7 @@ local measure_overlay = mp.create_osd_overlay("ass-events")
 measure_overlay.compute_bounds = true
 measure_overlay.hidden = true
 
-local function measure_width(text, size, font, bold)
+function Renderer.measure_width(text, size, font, bold)
 	if not text or text == "" then
 		return 0
 	end
@@ -55,6 +55,7 @@ function Renderer.render(selector)
 			and selector.style.font_size ~= 0
 			and math.floor(math.abs(selector.style.font_size) * scale_factor)
 		or math.floor(base_font_size * sub_scale * scale_factor)
+	selector.scaled_font_size = font_size
 
 	local font_name = (selector.style.font_name and selector.style.font_name ~= "") and selector.style.font_name
 		or mp.get_property("sub-font", "sans-serif")
@@ -105,7 +106,7 @@ function Renderer.render(selector)
 			local segment_text = raw_text:sub(search_pos, (next_nl and (next_nl - 1) or nil))
 
 			if segment_text ~= "" then
-				local tw = measure_width(segment_text, font_size, font_name, sub_bold)
+				local tw = Renderer.measure_width(segment_text, font_size, font_name, sub_bold)
 
 				-- Check auto-wrap
 				if current_line.width > 0 and current_line.width + tw > max_width then
@@ -159,7 +160,6 @@ function Renderer.render(selector)
 	)
 
 	for l_idx, line in ipairs(lines) do
-		-- y_line is bottom of current line
 		local y_line = y_base - (#lines - l_idx) * line_height
 		local current_x = (ow / 2) - (line.width / 2)
 
@@ -167,19 +167,47 @@ function Renderer.render(selector)
 			local is_selected = (
 				t_seg.index >= selector.index and t_seg.index < selector.index + selector.selection_len
 			)
+			local is_hovered = (selector.index == t_seg.index and selector.mora_index)
 
-			if is_selected then
+			local is_locked = (
+				selector.lookup_locked
+				and t_seg.index == selector.locked_index
+				and (
+					not selector.locked_mora_index
+					or (t_seg.visual_text and selector.get_mora_byte_pos(t_seg.visual_text, selector.locked_mora_index) > 0)
+				)
+			)
+
+			if is_selected and not is_hovered and not is_locked then
 				local sel_color = Display.fix_color(selector.style.selection_color or "00FFFF", "00FFFF")
 				osd:append(string.format("{\\1c&H%s&}", sel_color))
 			end
 
-			osd:append(t_seg.visual_text)
+			if is_locked and not is_hovered then
+				local lock_color = Display.fix_color(selector.style.selector_lock_color or "FFD700", "FFD700")
+				osd:append(string.format("{\\1c&H%s&}", lock_color))
+			end
 
-			if is_selected then
+			if is_hovered then
+				local term = t_seg.visual_text
+				local byte_pos = selector.get_mora_byte_pos(term, selector.mora_index)
+
+				local prefix = term:sub(1, byte_pos - 1)
+				local suffix = term:sub(byte_pos)
+				local sel_color = Display.fix_color(selector.style.selection_color or "00FFFF", "00FFFF")
+
+				osd:append(prefix)
+				osd:append(string.format("{\\1c&H%s&}", sel_color))
+				osd:append(suffix)
+				osd:append(string.format("{\\1c&H%s&}", main_color))
+			else
+				osd:append(t_seg.visual_text)
+			end
+
+			if (is_selected or is_locked) and not is_hovered then
 				osd:append(string.format("{\\1c&H%s&}", main_color))
 			end
 
-			-- Update hitboxes
 			table.insert(selector.token_boxes, {
 				index = t_seg.index,
 				x1 = current_x,
@@ -190,7 +218,6 @@ function Renderer.render(selector)
 			current_x = current_x + t_seg.width
 		end
 
-		-- Add newline for visual separation if not last
 		if l_idx < #lines then
 			osd:append("\\N")
 		end

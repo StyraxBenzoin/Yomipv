@@ -174,6 +174,19 @@ if config.key_toggle_picture_animated ~= "" then
 	end)
 end
 
+if config.key_toggle_mora_navigation ~= "" then
+	mp.add_key_binding(config.key_toggle_mora_navigation, "yomipv-toggle-mora-navigation", function()
+		config.selector_mora_navigation = not config.selector_mora_navigation
+		config.save("selector_mora_navigation", config.selector_mora_navigation)
+		local status = config.selector_mora_navigation and "Enabled" or "Disabled"
+		Player.notify("Mora navigation: " .. status, "info")
+		if Selector.active then
+			Selector.style.selector_mora_navigation = config.selector_mora_navigation
+			Selector:render()
+		end
+	end)
+end
+
 if config.key_set_timing_start ~= "" then
 	mp.add_key_binding(config.key_set_timing_start, "yomipv-set-timing-start", function()
 		handler:set_manual_start()

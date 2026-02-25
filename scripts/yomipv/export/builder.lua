@@ -124,7 +124,9 @@ function Builder:format_tag(template)
 	}
 
 	for key, val in pairs(replacements) do
-		result = result:gsub("%%?{" .. key .. "}", function() return val end)
+		result = result:gsub("%%?{" .. key .. "}", function()
+			return val
+		end)
 	end
 
 	result = result:gsub("%s+", "::")

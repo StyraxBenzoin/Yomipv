@@ -96,7 +96,9 @@ function Monitor.add_to_history(subtitle)
 		local overlap_duration = overlap_end - overlap_start
 
 		if overlap_duration < 0.3 then
-			msg.info("Discarding misaligned secondary subtitle (overlap: " .. string.format("%.3f", overlap_duration) .. "s)")
+			msg.info(
+				"Discarding misaligned secondary subtitle (overlap: " .. string.format("%.3f", overlap_duration) .. "s)"
+			)
 			secondary = ""
 		end
 	end

@@ -3,10 +3,10 @@
 
 local mp = require("mp")
 local StringOps = require("lib.string_ops")
+local Renderer = require("interface.selector.renderer")
 
 local Interaction = {}
 
--- Trigger lookup based on trigger source
 local function trigger_lookup_if_enabled(selector, trigger_source)
 	local should_trigger
 	if trigger_source == "hover" then
@@ -14,24 +14,40 @@ local function trigger_lookup_if_enabled(selector, trigger_source)
 	elseif trigger_source == "navigation" then
 		should_trigger = selector.style.lookup_on_navigation
 	else
-		-- Trigger initial lookup if either option is enabled
-		should_trigger = selector.style.lookup_on_navigation or selector.style.lookup_on_hover
+		should_trigger = selector.style.lookup_on_navigation
 	end
 
-	if should_trigger and selector.tokens[selector.index] and selector.tokens[selector.index].is_term then
-		local token = selector.tokens[selector.index]
-		local data = {
-			term = token.text,
-			reading = token.reading or (token.headwords and token.headwords[1] and token.headwords[1].reading),
-		}
-		if selector.style.on_lookup then
-			selector.style.on_lookup(data)
-		end
+	if not should_trigger or selector.lookup_locked then
+		return
 	end
+
+	-- Debounce to prevent lookups while moving mouse or navigating rapidly
+	if selector.lookup_timer then
+		selector.lookup_timer:kill()
+	end
+
+	local delay = selector.style.lookup_delay or 0.1
+	selector.lookup_timer = mp.add_timeout(delay, function()
+		selector.lookup_timer = nil
+		selector.pending_initial_hover_lookup = nil
+		local state = selector:get_selection_state()
+		if state and selector.tokens[selector.index] and selector.tokens[selector.index].is_term then
+			local data = {
+				term = state.text,
+				reading = state.reading,
+			}
+			if selector.style.on_lookup then
+				selector.style.on_lookup(data)
+			end
+		end
+	end)
 end
 
--- Hide lookup unless triggering to prevent race condition
 local function hide_if_needed(selector, trigger_source)
+	if selector.lookup_locked then
+		return
+	end
+
 	local will_trigger_lookup = false
 	if trigger_source == "hover" then
 		will_trigger_lookup = selector.style.lookup_on_hover
@@ -44,12 +60,25 @@ local function hide_if_needed(selector, trigger_source)
 		and selector.tokens[selector.index].is_term
 
 	if selector.style.on_hide and not will_trigger_lookup then
+		if selector.lookup_timer then
+			selector.lookup_timer:kill()
+			selector.lookup_timer = nil
+		end
 		selector.style.on_hide()
 	end
 end
 
 local function on_left(selector)
 	selector.selection_len = 1
+
+	if selector.style.selector_mora_navigation and selector.mora_index and selector.mora_index > 1 then
+		selector.mora_index = selector.mora_index - 1
+		selector:render()
+		trigger_lookup_if_enabled(selector, "navigation")
+		return
+	end
+
+	selector.mora_index = nil
 	local old_index = selector.index
 	repeat
 		selector.index = math.max(1, selector.index - 1)
@@ -59,6 +88,10 @@ local function on_left(selector)
 	end
 
 	if old_index ~= selector.index then
+		if selector.style.selector_mora_navigation then
+			local new_token = selector.tokens[selector.index]
+			selector.mora_index = selector.get_char_count(new_token.text)
+		end
 		hide_if_needed(selector, "navigation")
 	end
 
@@ -68,6 +101,20 @@ end
 
 local function on_right(selector)
 	selector.selection_len = 1
+	local token = selector.tokens[selector.index]
+
+	if selector.style.selector_mora_navigation then
+		local char_count = selector.get_char_count(token.text)
+		local current_mora = selector.mora_index or 1
+		if current_mora < char_count then
+			selector.mora_index = current_mora + 1
+			selector:render()
+			trigger_lookup_if_enabled(selector, "navigation")
+			return
+		end
+	end
+
+	selector.mora_index = nil
 	local old_index = selector.index
 	repeat
 		selector.index = math.min(#selector.tokens, selector.index + 1)
@@ -77,6 +124,9 @@ local function on_right(selector)
 	end
 
 	if old_index ~= selector.index then
+		if selector.style.selector_mora_navigation then
+			selector.mora_index = 1
+		end
 		hide_if_needed(selector, "navigation")
 	end
 
@@ -84,7 +134,6 @@ local function on_right(selector)
 	trigger_lookup_if_enabled(selector, "navigation")
 end
 
--- Find candidate for vertical navigation
 local function find_vertical_neighbor(selector, direction)
 	local current_boxes = {}
 	for _, box in ipairs(selector.token_boxes) do
@@ -105,8 +154,7 @@ local function find_vertical_neighbor(selector, direction)
 	local min_y_dist = math.huge
 	local min_x_dist = math.huge
 
-	-- Find boxes clearly above or below
-	-- 5px buffer for overlaps or rounding
+	-- 5px buffer prevents false positives from rounding and glyph overlap
 	for _, box in ipairs(selector.token_boxes) do
 		if not selector.tokens[box.index].is_term or box.index == selector.index then
 			goto continue
@@ -161,6 +209,7 @@ local function on_up(selector)
 	local best_candidate = find_vertical_neighbor(selector, "up")
 	if best_candidate then
 		selector.index = best_candidate
+		selector.mora_index = selector.style.selector_mora_navigation and 1 or nil
 		hide_if_needed(selector, "navigation")
 		selector:render()
 		trigger_lookup_if_enabled(selector, "navigation")
@@ -172,6 +221,7 @@ local function on_down(selector)
 	local best_candidate = find_vertical_neighbor(selector, "down")
 	if best_candidate then
 		selector.index = best_candidate
+		selector.mora_index = selector.style.selector_mora_navigation and 1 or nil
 		hide_if_needed(selector, "navigation")
 		selector:render()
 		trigger_lookup_if_enabled(selector, "navigation")
@@ -199,25 +249,24 @@ local function on_click(selector)
 end
 
 local function on_lookup(selector)
-	local token = selector.tokens[selector.index]
-	if not token or not token.is_term then
+	if not selector.tokens[selector.index] or not selector.tokens[selector.index].is_term then
 		return
 	end
 
-	local combined_text = ""
-	if selector.selection_len == 1 then
-		combined_text = token.text
-	else
-		for i = 0, selector.selection_len - 1 do
-			if selector.tokens[selector.index + i] then
-				combined_text = combined_text .. selector.tokens[selector.index + i].text
-			end
-		end
+	-- Kill any pending automatic lookup to prevent double-triggering
+	if selector.lookup_timer then
+		selector.lookup_timer:kill()
+		selector.lookup_timer = nil
+	end
+
+	local state = selector:get_selection_state()
+	if not state then
+		return
 	end
 
 	local data = {
-		term = combined_text,
-		reading = token.reading or (token.headwords and token.headwords[1] and token.headwords[1].reading),
+		term = state.text,
+		reading = state.reading,
 	}
 
 	if selector.style.on_lookup then
@@ -238,11 +287,38 @@ function Interaction.check_hover(selector)
 	local hit = false
 	for _, entry in ipairs(selector.token_boxes) do
 		if mx >= entry.x1 and mx <= entry.x2 and my >= entry.y1 and my <= entry.y2 then
-			if selector.index ~= entry.index then
+			local char_index = nil
+			if selector.style.selector_mora_hover then
+				-- Calculate character offset from mouse position
+				local token = selector.tokens[entry.index]
+				if token and token.is_term then
+					local relative_x = mx - entry.x1
+					local scaled_font_size = selector.scaled_font_size or selector.style.font_size or 45
+					local font_name = selector.style.font_name or ""
+					local bold = selector.style.bold ~= nil and selector.style.bold
+						or mp.get_property_bool("sub-bold", true)
+
+					local count = 0
+					for next_i, _ in selector.utf8_codes(token.text) do
+						count = count + 1
+						local text_up_to_char = token.text:sub(1, next_i - 1)
+						local tw = Renderer.measure_width(text_up_to_char, scaled_font_size, font_name, bold)
+						if relative_x <= tw then
+							char_index = count
+							break
+						end
+					end
+				end
+			end
+
+			if selector.index ~= entry.index or selector.mora_index ~= char_index or selector.pending_initial_hover_lookup then
 				selector.index = entry.index
+				selector.mora_index = char_index
 				hide_if_needed(selector, "hover")
 				selector:render()
-				trigger_lookup_if_enabled(selector, "hover")
+				if not selector.lookup_locked then
+					trigger_lookup_if_enabled(selector, "hover")
+				end
 			end
 			hit = true
 			break
@@ -250,6 +326,10 @@ function Interaction.check_hover(selector)
 	end
 
 	if not hit then
+		if selector.mora_index and not selector.style.selector_mora_navigation then
+			selector.mora_index = nil
+			selector:render()
+		end
 		if selector.style.on_hover_fallback then
 			selector.style.on_hover_fallback()
 		end
@@ -287,15 +367,9 @@ function Interaction.bind(selector)
 	register(style.key_up or "UP", "selector-up", on_up, "repeatable")
 	register(style.key_down or "DOWN", "selector-down", on_down, "repeatable")
 	register(style.key_confirm or "ENTER,c", "selector-confirm", function(s)
-		if s.style.on_hide then
-			s.style.on_hide()
-		end
 		s:confirm()
 	end)
 	register(style.key_cancel or "ESC", "selector-cancel", function(s)
-		if s.style.on_hide then
-			s.style.on_hide()
-		end
 		s:cancel()
 	end)
 	register(style.key_lookup or "d", "selector-lookup", on_lookup)
@@ -325,15 +399,19 @@ function Interaction.bind(selector)
 		end
 	end, "repeatable")
 
-	register(style.key_split or "s", "selector-split", function(s)
-		s:split()
+	mp.add_forced_key_binding("MOUSE_BTN2", "selector-lock-mouse", function()
+		selector.lookup_locked = not selector.lookup_locked
+		if selector.lookup_locked then
+			selector.locked_index = selector.index
+			selector.locked_mora_index = selector.mora_index
+		else
+			selector.locked_index = nil
+			selector.locked_mora_index = nil
+			trigger_lookup_if_enabled(selector, "hover")
+		end
+		selector:render()
 	end)
-
-	-- Mouse bindings
-	mp.add_forced_key_binding("MOUSE_BTN2", "selector-split-mouse", function()
-		selector:split()
-	end)
-	table.insert(keys, "selector-split-mouse")
+	table.insert(keys, "selector-lock-mouse")
 
 	mp.add_forced_key_binding("MBTN_LEFT", "selector-click", function()
 		on_click(selector)

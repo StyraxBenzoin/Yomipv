@@ -5,12 +5,15 @@ const headerEl = document.getElementById('term-header');
 const entryPrev = document.getElementById('entry-prev');
 const entryNext = document.getElementById('entry-next');
 const entryCounter = document.getElementById('entry-counter');
+let isWindowVisible = false;
+let isPerformingLookup = false;
 
 let allEntries = [];
 let currentEntryIndex = 0;
 let currentShowFrequencies = false;
 let currentDictionaryMedia = [];
-let lookupHistory = []; // Track previous lookups
+let lookupHistory = [];
+let currentAbortController = null;
 
 const filterDictionaryStyles = (styleEl, dictName) => {
   if (!styleEl || !styleEl.sheet || !styleEl.sheet.cssRules || styleEl.sheet.cssRules.length === 0) return '';
@@ -320,32 +323,73 @@ const sendSelectedDict = (el) => {
 const performLookup = async (term, showFrequencies, isBack = false) => {
   console.log('[UI] Performing lookup for:', term);
   
-  // Save current term to history if not going back
-  if (!isBack && allEntries.length > 0 && currentEntryIndex < allEntries.length) {
-    const entry = allEntries[currentEntryIndex].fields || allEntries[currentEntryIndex];
-    if (entry.expression && entry.expression !== term) {
-      lookupHistory.push({ term: entry.expression, showFrequencies: currentShowFrequencies });
-    }
+  const container = document.getElementById('lookup-container');
+  const isVisible = container.classList.contains('visible');
+
+  isPerformingLookup = true;
+
+  // Abort any pending lookup fetch
+  if (currentAbortController) {
+    currentAbortController.abort();
+  }
+  currentAbortController = new AbortController();
+  const { signal } = currentAbortController;
+
+  // Detect if this is a sub-word transition
+  let isSubword = false;
+  let currentTerm = '';
+  if (allEntries.length > 0 && currentEntryIndex < allEntries.length) {
+    const currentFields = allEntries[currentEntryIndex].fields || allEntries[currentEntryIndex];
+    currentTerm = currentFields.expression || '';
+    isSubword = isWindowVisible && isVisible && currentTerm && currentTerm.includes(term);
   }
 
-  allEntries = [];
-  currentEntryIndex = 0;
-  currentShowFrequencies = showFrequencies || false;
-  entryPrev.style.display = 'none';
-  entryNext.style.display = 'none';
-  entryCounter.style.display = 'none';
+  // If identical term and already visible, skip fetch/re-render to avoid flicker
+  if (isSubword && term === currentTerm && isWindowVisible && isVisible) {
+    console.log('[UI] Identical term and already fully visible, skipping redundant lookup');
+    isPerformingLookup = false;
+    currentAbortController = null;
+    return;
+  }
 
-  headerEl.innerHTML = '';
-  glossaryEl.innerHTML = '<div class="loading">Looking up...</div>';
+  // Save current term to history if not going back
+  if (!isBack && currentTerm && currentTerm !== term) {
+    lookupHistory.push({ term: currentTerm, showFrequencies: currentShowFrequencies });
+  }
+
+  currentShowFrequencies = showFrequencies || false;
+
+  // Show transition screen only for non-subword transitions
+  if (!isSubword) {
+    allEntries = [];
+    currentEntryIndex = 0;
+    
+    // Hide the container to prevent seeing old content
+    container.classList.add('no-transition');
+    container.classList.remove('visible');
+    
+    headerEl.innerHTML = '';
+    glossaryEl.innerHTML = '';
+    entryPrev.style.display = 'none';
+    entryNext.style.display = 'none';
+    entryCounter.style.display = 'none';
+
+    void container.offsetHeight;
+
+    ipcRenderer.send('show-window');
+    isWindowVisible = true;
+  }
 
   try {
     let result;
     const endpoints = [`http://127.0.0.1:19633/ankiFields`, `http://127.0.0.1:19633/api/ankiFields`];
 
     for (const url of endpoints) {
+      if (signal.aborted) return;
       try {
         const response = await fetch(url, {
           method: 'POST',
+          signal: signal,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             text: term,
@@ -376,7 +420,27 @@ const performLookup = async (term, showFrequencies, isBack = false) => {
     const entries = (result && result.fields) || (result && result[0] && result[0].fields) || [];
 
     if (!Array.isArray(entries) || entries.length === 0) {
+      allEntries = [];
+      currentEntryIndex = 0;
+      headerEl.innerHTML = '';
       glossaryEl.innerHTML = `No result found for "${term}".`;
+      entryPrev.style.display = 'none';
+      entryNext.style.display = 'none';
+      entryCounter.style.display = 'none';
+      
+      ipcRenderer.send('show-window');
+      isWindowVisible = true;
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          container.classList.remove('no-transition');
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              document.getElementById('lookup-container').classList.add('visible');
+            });
+          });
+        });
+      });
       return;
     }
 
@@ -384,22 +448,82 @@ const performLookup = async (term, showFrequencies, isBack = false) => {
       const fa = a.fields || a;
       const fb = b.fields || b;
       
-      const lenA = (fa.expression || '').length;
-      const lenB = (fb.expression || '').length;
-      if (lenA !== lenB) return lenB - lenA;
+      const exprA = fa.expression || '';
+      const exprB = fb.expression || '';
+      
+      // Katakana priority
+      const isKatakanaOnly = /^[\u30A0-\u30FF]+$/.test(term);
+      if (isKatakanaOnly) {
+        const exactA = exprA === term ? 1 : 0;
+        const exactB = exprB === term ? 1 : 0;
+        if (exactA !== exactB) return exactB - exactA;
+      }
+      
+      // Kanji priority
+      const kanjiA = (exprA && exprA !== fa.reading) ? 1 : 0;
+      const kanjiB = (exprB && exprB !== fb.reading) ? 1 : 0;
+      if (kanjiA !== kanjiB) return kanjiB - kanjiA;
 
-      const scoreA = (fa.expression && fa.expression !== fa.reading) ? 1 : 0;
-      const scoreB = (fb.expression && fb.expression !== fb.reading) ? 1 : 0;
-      return scoreB - scoreA;
+      // Fallback to length
+      const lenA = exprA.length;
+      const lenB = exprB.length;
+      return lenB - lenA;
     });
 
     allEntries = sorted;
     currentEntryIndex = 0;
     renderEntry(currentEntryIndex, allEntries, currentShowFrequencies);
 
+    if (signal.aborted) return;
+
+    if (isSubword) {
+      container.classList.add('visible');
+      isWindowVisible = true;
+    } else {
+      ipcRenderer.send('show-window');
+      isWindowVisible = true;
+      
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          container.classList.remove('no-transition');
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              container.classList.add('visible');
+            });
+          });
+        });
+      });
+    }
+
+    isPerformingLookup = false;
+    currentAbortController = null;
+
   } catch (e) {
+    if (e.name === 'AbortError') return;
     console.error('Lookup failed', e);
+    isPerformingLookup = false;
+    currentAbortController = null;
+    allEntries = [];
+    currentEntryIndex = 0;
+    headerEl.innerHTML = '';
     glossaryEl.innerHTML = `Error fetching from Yomitan: ${e.message}`;
+    entryPrev.style.display = 'none';
+    entryNext.style.display = 'none';
+    entryCounter.style.display = 'none';
+    
+    ipcRenderer.send('show-window');
+    isWindowVisible = true;
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        container.classList.remove('no-transition');
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            document.getElementById('lookup-container').classList.add('visible');
+          });
+        });
+      });
+    });
   }
 };
 
@@ -407,6 +531,29 @@ ipcRenderer.on('lookup-term', async (event, data) => {
   console.log('[IPC] Received lookup data:', JSON.stringify(data));
   lookupHistory = [];
   performLookup(data.term, data.showFrequencies);
+});
+
+ipcRenderer.on('window-hide-request', () => {
+  console.log('[IPC] window-hide-request received, clearing and confirming');
+  
+  if (isPerformingLookup && currentAbortController) {
+    console.log('[IPC] Aborting active lookup due to hide request');
+    currentAbortController.abort();
+    isPerformingLookup = false;
+  }
+  
+  isWindowVisible = false;
+  const container = document.getElementById('lookup-container');
+  container.classList.add('no-transition');
+  container.classList.remove('visible');
+  headerEl.innerHTML = '';
+  glossaryEl.innerHTML = '';
+  allEntries = [];
+  currentEntryIndex = 0;
+  
+  requestAnimationFrame(() => {
+    ipcRenderer.send('window-hide-confirmed');
+  });
 });
 
 entryPrev.addEventListener('click', () => {

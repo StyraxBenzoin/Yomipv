@@ -143,6 +143,9 @@ local default_options = {
 	-- Lookup
 	selector_lookup_on_hover = false, -- Automatically show lookup on hover
 	selector_lookup_on_navigation = false, -- Automatically show lookup on navigation
+	selector_lookup_delay = 0.1, -- Delay in seconds before triggering lookup
+	selector_mora_hover = true, -- Lookup sub-words while hovering individual characters
+	selector_mora_navigation = false, -- Navigate through individual characters with arrow keys
 	lookup_show_frequencies = true,
 
 	-- Typography
@@ -152,7 +155,8 @@ local default_options = {
 
 	-- Appearance
 	selector_color = "#FFFFFF",
-	selector_selection_color = "#56FF68", -- Color of active term highlight
+	selector_selection_color = "#56FF68",
+	selector_lock_color = "#FFD700",
 	selector_border_color = "#000000",
 	selector_border_size = 2,
 	selector_shadow_color = "#000000",
@@ -176,6 +180,7 @@ local default_options = {
 	key_selection_next = "Ctrl+RIGHT",
 	key_selection_prev = "Ctrl+LEFT",
 	key_selector_lookup = "Ctrl+c",
+	key_toggle_mora_navigation = "s",
 	key_append_mode = "C",
 	key_set_timing_start = "",
 	key_set_timing_end = "",

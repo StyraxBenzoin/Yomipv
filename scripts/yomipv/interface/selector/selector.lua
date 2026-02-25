@@ -1,8 +1,6 @@
---[[ Interactive word selector                     ]]
---[[ Selection flow and token split orchestration. ]]
+--[[ Interactive word selector ]]
 
 local mp = require("mp")
-local msg = require("mp.msg")
 local Renderer = require("interface.selector.renderer")
 local Interaction = require("interface.selector.interaction")
 
@@ -12,20 +10,20 @@ local Selector = {
 	callback = nil,
 	active = false,
 	should_resume = false,
-	-- Layout and Interaction state
-	token_boxes = {}, -- Stored OSD space coordinates {x1, y1, x2, y2}
+	token_boxes = {},
 	input_timer = nil,
 	last_mouse_x = -1,
 	last_mouse_y = -1,
 	style = {},
 	ui_hidden_by_us = false,
-	registered_keys = {}, -- Binding track for cleanup
-	split_history = {}, -- Undo stack
+	registered_keys = {},
 	selection_len = 1,
 	sub_visibility_before = "yes",
+	lookup_locked = false,
+	locked_index = nil,
+	locked_mora_index = nil,
 }
 
--- UTF-8 Iterator polyfill
 local function utf8_iter(s, i)
 	if not s then
 		return nil
@@ -62,27 +60,68 @@ local function utf8_iter(s, i)
 	return next_i, code
 end
 
-local function utf8_codes(str)
+function Selector.utf8_codes(str)
 	return utf8_iter, str, 1
 end
 
--- Split text into individual UTF-8 characters
-local function split_into_characters(text)
-	local chars = {}
+function Selector.get_mora_byte_pos(text, mora_index)
+	if not mora_index or mora_index <= 1 then
+		return 1
+	end
 	local i = 1
-	for next_i, _ in utf8_codes(text) do
-		local char = text:sub(i, next_i - 1)
-		if char ~= "" then
-			table.insert(chars, {
-				text = char,
-				headwords = nil,
-				offset = 0, -- Recalculated during insertion
-				is_term = true, -- All characters are selectable
-			})
+	local char_count = 0
+	for next_i, _ in Selector.utf8_codes(text) do
+		char_count = char_count + 1
+		if char_count == mora_index then
+			return i
 		end
 		i = next_i
 	end
-	return chars
+	return i
+end
+
+function Selector.get_char_count(text)
+	local count = 0
+	for _ in Selector.utf8_codes(text) do
+		count = count + 1
+	end
+	return count
+end
+
+function Selector:get_selection_state()
+	local token = self.tokens[self.index]
+	if not token then
+		return nil
+	end
+
+	local text = ""
+	local offset = token.offset
+	local headwords = token.headwords
+	local reading = token.reading or (token.headwords and token.headwords[1] and token.headwords[1].reading)
+
+	if self.selection_len == 1 then
+		text = token.text
+		if self.mora_index and self.mora_index > 1 then
+			local byte_pos = Selector.get_mora_byte_pos(text, self.mora_index)
+			local skipped_text = text:sub(1, byte_pos - 1)
+			text = text:sub(byte_pos)
+			offset = offset + skipped_text:len()
+		end
+	else
+		for i = 0, self.selection_len - 1 do
+			local t = self.tokens[self.index + i]
+			if t then
+				text = text .. t.text
+			end
+		end
+	end
+
+	return {
+		text = text,
+		offset = offset,
+		headwords = headwords,
+		reading = reading,
+	}
 end
 
 local function render_cb()
@@ -93,6 +132,11 @@ function Selector:render()
 	Renderer.render(self)
 end
 
+function Selector:update_style(style)
+	self.style = style or {}
+	self:render()
+end
+
 function Selector:clear()
 	self.active = false
 	if self.input_timer then
@@ -100,8 +144,15 @@ function Selector:clear()
 		self.input_timer = nil
 	end
 	mp.unobserve_property(render_cb)
+	if self.lookup_timer then
+		self.lookup_timer:kill()
+		self.lookup_timer = nil
+	end
 	mp.set_osd_ass(0, 0, "")
 	mp.set_property("sub-visibility", self.sub_visibility_before)
+	self.lookup_locked = false
+	self.locked_index = nil
+	self.locked_mora_index = nil
 
 	Interaction.unbind(self)
 
@@ -113,27 +164,22 @@ function Selector:clear()
 		mp.set_property_native("pause", false)
 		self.should_resume = false
 	end
+
+	if self.style.on_hide then
+		self.style.on_hide()
+	end
 end
 
 function Selector:confirm()
-	local combined_text = ""
-	local headwords = nil
-	-- Extract headwords and combined text from range
-	if self.selection_len == 1 then
-		combined_text = self.tokens[self.index].text
-		headwords = self.tokens[self.index].headwords
-	else
-		for i = 0, self.selection_len - 1 do
-			if self.tokens[self.index + i] then
-				combined_text = combined_text .. self.tokens[self.index + i].text
-			end
-		end
+	local state = self:get_selection_state()
+	if not state then
+		return
 	end
 
 	local token = {
-		text = combined_text,
-		headwords = headwords,
-		offset = self.tokens[self.index].offset, -- Start offset tracking
+		text = state.text,
+		headwords = state.headwords,
+		offset = state.offset,
 		is_term = true,
 	}
 
@@ -143,19 +189,9 @@ function Selector:confirm()
 end
 
 function Selector:cancel()
-	-- Revert to previous split state if history exists
-	if self.split_history and #self.split_history > 0 then
-		local history_entry = table.remove(self.split_history)
-		self.tokens = history_entry.tokens
-		self.index = history_entry.index
-		msg.info("Undo split: restored previous state")
-		self:render()
-	else
-		-- Terminate selector session
-		self:clear()
-		if self.callback then
-			self.callback(nil)
-		end
+	self:clear()
+	if self.callback then
+		self.callback(nil)
 	end
 end
 
@@ -182,150 +218,6 @@ function Selector:append_tokens(new_tokens)
 	self:render()
 end
 
-function Selector:split()
-	if not self.active or not self.tokens or #self.tokens == 0 then
-		return
-	end
-
-	local current_token = self.tokens[self.index]
-	if not current_token then
-		return
-	end
-
-	local split_level = current_token.split_level or 0
-
-	-- Save history for split
-	local history_entry = {
-		tokens = {},
-		index = self.index,
-	}
-	for i, token in ipairs(self.tokens) do
-		history_entry.tokens[i] = {
-			text = token.text,
-			headwords = token.headwords,
-			offset = token.offset,
-			is_term = token.is_term,
-			split_level = token.split_level,
-		}
-	end
-	table.insert(self.split_history, history_entry)
-
-	if split_level == 0 then
-		-- Retokenize with scanLength=1 via Yomitan API
-		msg.info("Splitting token with Yomitan (scanLength=1): " .. current_token.text)
-
-		-- Require Yomitan module
-		if not self.style.yomitan then
-			msg.warn("Yomitan module not available for splitting")
-			-- Character split fallback
-			local char_tokens = split_into_characters(current_token.text)
-			for _, t in ipairs(char_tokens) do
-				t.split_level = 2
-			end
-
-			-- Replace token with chars
-			local new_tokens = {}
-			for i = 1, self.index - 1 do
-				table.insert(new_tokens, self.tokens[i])
-			end
-			for _, t in ipairs(char_tokens) do
-				table.insert(new_tokens, t)
-			end
-			for i = self.index + 1, #self.tokens do
-				table.insert(new_tokens, self.tokens[i])
-			end
-
-			self.tokens = new_tokens
-			self:render()
-			return
-		end
-
-		self.style.yomitan:tokenize_with_scan_length(current_token.text, 1, function(new_tokens, error)
-			if error or not new_tokens or #new_tokens == 0 then
-				msg.warn("Yomitan failed, fallback to char split: " .. tostring(error))
-				-- Character split fallback on failure
-				local char_tokens = split_into_characters(current_token.text)
-				for _, t in ipairs(char_tokens) do
-					t.split_level = 2
-				end
-
-				-- Replace current token
-				local result_tokens = {}
-				for i = 1, self.index - 1 do
-					table.insert(result_tokens, self.tokens[i])
-				end
-				for _, t in ipairs(char_tokens) do
-					table.insert(result_tokens, t)
-				end
-				for i = self.index + 1, #self.tokens do
-					table.insert(result_tokens, self.tokens[i])
-				end
-
-				self.tokens = result_tokens
-				self:render()
-				return
-			end
-
-			-- Tag new tokens for tracking depth
-			for _, t in ipairs(new_tokens) do
-				t.split_level = 1
-			end
-
-			-- Replace target token with split results
-			local result_tokens = {}
-			for i = 1, self.index - 1 do
-				table.insert(result_tokens, self.tokens[i])
-			end
-			for _, t in ipairs(new_tokens) do
-				table.insert(result_tokens, t)
-			end
-			for i = self.index + 1, #self.tokens do
-				table.insert(result_tokens, self.tokens[i])
-			end
-
-			self.tokens = result_tokens
-			msg.info("Split complete: " .. #new_tokens .. " new tokens")
-			self:render()
-		end)
-	elseif split_level == 1 then
-		-- Individual character split depth
-		msg.info("Splitting token into characters: " .. current_token.text)
-		local char_tokens = split_into_characters(current_token.text)
-
-		if #char_tokens <= 1 then
-			msg.info("Token is already a single character, cannot split further")
-			-- Discard redundant history entry
-			table.remove(self.split_history)
-			return
-		end
-
-		for _, t in ipairs(char_tokens) do
-			t.split_level = 2
-		end
-
-		-- Character insertion for split range
-		local new_tokens = {}
-		for i = 1, self.index - 1 do
-			table.insert(new_tokens, self.tokens[i])
-		end
-		for _, t in ipairs(char_tokens) do
-			table.insert(new_tokens, t)
-		end
-		for i = self.index + 1, #self.tokens do
-			table.insert(new_tokens, self.tokens[i])
-		end
-
-		self.tokens = new_tokens
-		msg.info("Character split complete: " .. #char_tokens .. " characters")
-		self:render()
-	else
-		-- Tokens at char level
-		msg.info("Token already at character level, cannot split further")
-		-- Discard redundant history entry
-		table.remove(self.split_history)
-	end
-end
-
 function Selector:start(tokens, callback, style)
 	if self.active then
 		return
@@ -335,7 +227,11 @@ function Selector:start(tokens, callback, style)
 	self.style = style or {}
 	self.index = 1
 	self.selection_len = 1
-	self.split_history = {}
+	self.lookup_timer = nil
+	self.pending_initial_hover_lookup = true
+	self.lookup_locked = false
+	self.locked_index = nil
+	self.locked_mora_index = nil
 	for i, token in ipairs(tokens) do
 		if token.is_term then
 			self.index = i
@@ -347,17 +243,14 @@ function Selector:start(tokens, callback, style)
 	self.sub_visibility_before = mp.get_property("sub-visibility", "yes")
 	mp.set_property("sub-visibility", "no")
 
-	-- Interface pause logic
 	if style.should_pause ~= false then
 		if not mp.get_property_native("pause") then
 			mp.set_property_native("pause", true)
 			self.should_resume = true
 		else
-			-- Apply resume override if requested
 			self.should_resume = style.should_resume == true
 		end
 	else
-		-- Direct override from style
 		self.should_resume = style.should_resume == true
 	end
 
@@ -382,7 +275,6 @@ function Selector:start(tokens, callback, style)
 		Interaction.check_hover(self)
 	end)
 
-	-- Trigger initial lookup if auto-lookup is enabled
 	Interaction.trigger_initial_lookup(self)
 end
 

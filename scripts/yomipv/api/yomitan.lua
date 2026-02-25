@@ -24,6 +24,42 @@ local function count_utf8_chars(text)
 	return char_count
 end
 
+local function is_katakana_only(s)
+	if not s or s == "" then
+		return false
+	end
+
+	local char_count = 0
+	local katakana_count = 0
+
+	local i = 1
+	while i <= #s do
+		local b1 = s:byte(i)
+		local b2 = s:byte(i + 1)
+		local b3 = s:byte(i + 2)
+
+		if b1 == 227 and b2 and b3 then
+			if (b2 == 130 and b3 >= 160) or (b2 == 131 and b3 <= 191) then
+				katakana_count = katakana_count + 1
+			end
+			i = i + 3
+		else
+			if b1 < 128 then
+				i = i + 1
+			elseif b1 < 224 then
+				i = i + 2
+			elseif b1 < 240 then
+				i = i + 3
+			else
+				i = i + 4
+			end
+		end
+		char_count = char_count + 1
+	end
+
+	return char_count > 0 and char_count == katakana_count
+end
+
 local function is_selectable_term(token_text, headwords)
 	if headwords and #headwords > 0 then
 		return true
@@ -192,7 +228,7 @@ function Yomitan:tokenize_with_scan_length(text, scan_length, callback)
 end
 
 function Yomitan:get_anki_fields(term, markers, context, callback, active_expression, active_reading)
-	-- When the user explicitly navigated to an entry, look it up directly
+	-- Prefer active_expression as search text to support manual narrowing in the UI
 	local lookup_text = (active_expression and active_expression ~= "") and active_expression or term
 	local params = {
 		text = lookup_text,
@@ -221,6 +257,7 @@ function Yomitan:get_anki_fields(term, markers, context, callback, active_expres
 
 		local selected_entry = fields_list[1]
 
+		-- Attempt to pin by explicit lookup selection (active_expression)
 		if active_expression and active_expression ~= "" then
 			for _, entry in ipairs(fields_list) do
 				if
@@ -232,24 +269,37 @@ function Yomitan:get_anki_fields(term, markers, context, callback, active_expres
 					break
 				end
 			end
-		else
-			local best_score = -1
+		end
+
+		-- If no pinned entry found or no pin provided, score current results
+		-- Matches the hierarchy in lookup-app/renderer.js
+		local best_score = -1
+		local current_pinned = (active_expression == selected_entry.expression)
+
+		if not current_pinned then
+			local term_is_katakana = is_katakana_only(term)
+
 			for _, entry in ipairs(fields_list) do
 				local score = 0
 				local expr = entry.expression or ""
 				local reading = entry.reading or ""
 
-				if expr ~= reading then
-					score = score + 1
+				-- Katakana priority
+				if term_is_katakana and expr == term then
+					score = score + 1000
 				end
+
+				-- Kanji priority
+				if expr ~= reading then
+					score = score + 100
+				end
+
+				-- Fallback to length
+				score = score + count_utf8_chars(expr)
 
 				if score > best_score then
 					best_score = score
 					selected_entry = entry
-				end
-
-				if score == 1 and expr == term then
-					break
 				end
 			end
 		end
