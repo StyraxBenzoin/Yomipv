@@ -23,8 +23,10 @@ function Formatter.substitute(_, template, variables)
 
 	if variables then
 		for key, value in pairs(variables) do
-			local pattern = "%%{" .. key .. "}"
-			result = result:gsub(pattern, tostring(value))
+			local pattern1 = "%%{" .. key .. "}"
+			local pattern2 = "{" .. key .. "}"
+			result = result:gsub(pattern1, tostring(value))
+			result = result:gsub(pattern2, tostring(value))
 		end
 	end
 

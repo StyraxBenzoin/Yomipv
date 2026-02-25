@@ -39,7 +39,7 @@ function Builder:construct_note_fields(secondary_subtitle, picture_file, audio_f
 	return fields
 end
 
-function Builder:generate_miscinfo()
+function Builder:get_metadata()
 	local title = mp.get_property("media-title", "")
 	local path = mp.get_property("path", "")
 
@@ -47,22 +47,32 @@ function Builder:generate_miscinfo()
 	local season_num, episode_num = self._parse_season_episode(title, path)
 	local timestamp = self:format_timestamp()
 
+	return {
+		name = sanitized_title,
+		season_num = season_num,
+		episode_num = episode_num,
+		timestamp = timestamp,
+	}
+end
+
+function Builder:generate_miscinfo()
+	local metadata = self:get_metadata()
+
 	local season_str = ""
 	local episode_str = ""
 	-- Use bullet for episode index and comma separator between components
 	local bullet = self.config.miscinfo_episode_bullet and " • " or " "
 
-	if season_num and (tonumber(season_num) > 1 or self.config.miscinfo_show_season_one) then
-		season_str = self.config.miscinfo_season_label .. " " .. tonumber(season_num)
+	if metadata.season_num and (tonumber(metadata.season_num) > 1 or self.config.miscinfo_show_season_one) then
+		season_str = self.config.miscinfo_season_label .. " " .. tonumber(metadata.season_num)
 	end
 
-	if episode_num then
-		episode_str = self.config.miscinfo_episode_label .. " " .. tonumber(episode_num)
+	if metadata.episode_num then
+		episode_str = self.config.miscinfo_episode_label .. " " .. tonumber(metadata.episode_num)
 	end
 
 	if season_str ~= "" and episode_str ~= "" then
 		season_str = bullet .. season_str .. ", "
-		-- episode_str stays as is
 	elseif season_str ~= "" then
 		season_str = bullet .. season_str
 	elseif episode_str ~= "" then
@@ -71,12 +81,55 @@ function Builder:generate_miscinfo()
 
 	local format = self.config.miscinfo_format
 
-	format = format:gsub("{name}", sanitized_title)
+	format = format:gsub("{name}", metadata.name)
 	format = format:gsub("{season}", season_str)
 	format = format:gsub("{episode}", episode_str)
-	format = format:gsub("{timestamp}", timestamp)
+	format = format:gsub("{timestamp}", metadata.timestamp)
 
 	return string.format(self.config.miscinfo_wrapper, format)
+end
+
+function Builder:format_tag(template)
+	if not template or template == "" then
+		return ""
+	end
+
+	local metadata = self:get_metadata()
+
+	local function tag_safe(val)
+		if not val then
+			return ""
+		end
+		return tostring(val):gsub(" ", "_")
+	end
+
+	local name = tag_safe(metadata.name)
+	local season_str = ""
+	local episode_str = ""
+
+	if metadata.season_num and (tonumber(metadata.season_num) > 1 or self.config.miscinfo_show_season_one) then
+		season_str = tag_safe(self.config.miscinfo_season_label .. " " .. tonumber(metadata.season_num))
+	end
+
+	if metadata.episode_num then
+		episode_str = tag_safe(self.config.miscinfo_episode_label .. " " .. tonumber(metadata.episode_num))
+	end
+
+	local result = template
+	local replacements = {
+		name = name,
+		season = season_str,
+		episode = episode_str,
+		timestamp = tag_safe(metadata.timestamp),
+	}
+
+	for key, val in pairs(replacements) do
+		result = result:gsub("%%?{" .. key .. "}", function() return val end)
+	end
+
+	result = result:gsub("%s+", "::")
+
+	return result
 end
 
 function Builder._sanitize_title(title, path)

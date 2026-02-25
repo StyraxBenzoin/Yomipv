@@ -96,6 +96,7 @@ local default_options = {
 	--[[ Note tagging settings ]]
 
 	-- Target tags for exported notes
+	-- {name}, {season}, {episode}, and {timestamp} can also be used with the note tag
 	note_tag = "アニメ",
 
 	--[[ Picture settings ]]

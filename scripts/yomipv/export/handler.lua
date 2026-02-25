@@ -853,7 +853,7 @@ function Handler:change_fields(note_ids, new_data)
 			self.deps.anki:sync_media_fields(
 				note_id,
 				updated_data,
-				self.deps.formatter:substitute(self.config.note_tag),
+				self.deps.builder:format_tag(self.config.note_tag),
 				function()
 					change_notes_countdown:decrease()
 				end
@@ -1010,7 +1010,7 @@ function Handler:perform_anki_save(_context, note_fields)
 		self.config.deck,
 		self.config.note_type,
 		note_fields,
-		self.config.note_tag,
+		self.deps.builder:format_tag(self.config.note_tag),
 		function(note_id, error)
 			if error then
 				if error:match("duplicate") and self.config.update_if_exists then
