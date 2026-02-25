@@ -235,7 +235,7 @@ function Handler:initialize_export_context(gui)
 		gui = gui,
 	}
 
-	if self.manual_start and self.manual_end then
+	if self.manual_start or self.manual_end then
 		self:apply_manual_range(context)
 	end
 
@@ -310,14 +310,18 @@ function Handler:handle_selector_result(context, selected_token)
 
 	if not selected_token then
 		msg.info("Selector cancelled")
-		self.manual_start = nil
-		self.manual_end = nil
+		self:refresh_timing_overlay()
 		return
 	end
 
 	if selected_token == "prev_sub" or selected_token == "next_sub" then
 		return
 	end
+
+	-- Clear manual timings immediately once selection is confirmed to prevent stale OSD/overlap
+	self.manual_start = nil
+	self.manual_end = nil
+	self:refresh_timing_overlay()
 
 	local yomitan_fields = self:build_yomitan_fields()
 
@@ -886,6 +890,7 @@ function Handler:new()
 		pending_lookup_reading = nil,
 		manual_start = nil,
 		manual_end = nil,
+		timing_overlay = mp.create_osd_overlay("ass-events"),
 	}
 	setmetatable(obj, self)
 	self.__index = self
@@ -902,7 +907,7 @@ function Handler:set_manual_start()
 		return
 	end
 	self.manual_start = pos
-	Player.notify(string.format("Start: %s", StringOps.format_duration(pos, true)), "info", 2)
+	self:refresh_timing_overlay()
 end
 
 function Handler:set_manual_end()
@@ -911,13 +916,43 @@ function Handler:set_manual_end()
 		return
 	end
 	self.manual_end = pos
-	Player.notify(string.format("End: %s", StringOps.format_duration(pos, true)), "info", 2)
+	self:refresh_timing_overlay()
 end
 
 function Handler:clear_manual_timings()
 	self.manual_start = nil
 	self.manual_end = nil
+	self:refresh_timing_overlay()
 	Player.notify("Timings cleared", "info", 2)
+end
+
+function Handler:refresh_timing_overlay(start_override, end_override)
+	if not self.timing_overlay then
+		return
+	end
+
+	local effective_start = start_override or self.manual_start
+	local effective_end = end_override or self.manual_end
+
+	if not effective_start and not effective_end then
+		self.timing_overlay.data = ""
+		self.timing_overlay:update()
+		return
+	end
+
+	local ass = "{\\an7\\fs25\\bord2\\shad0\\1c&HFFFFFF&\\pos(20,60)}"
+	if effective_start then
+		ass = ass .. string.format("Start: %s", StringOps.format_duration(effective_start, true))
+		if effective_end then
+			ass = ass .. "\\N"
+		end
+	end
+	if effective_end then
+		ass = ass .. string.format("End: %s", StringOps.format_duration(effective_end, true))
+	end
+
+	self.timing_overlay.data = ass
+	self.timing_overlay:update()
 end
 
 function Handler:apply_manual_range(context)
@@ -926,9 +961,12 @@ function Handler:apply_manual_range(context)
 		return
 	end
 
+	local effective_start = self.manual_start or context.sub.start
+	local effective_end = self.manual_end or context.sub["end"]
+
 	local collected = {}
 	for _, entry in ipairs(history) do
-		if entry["end"] > self.manual_start and entry.start < self.manual_end then
+		if entry["end"] > effective_start and entry.start < effective_end then
 			table.insert(collected, entry)
 		end
 	end
@@ -950,12 +988,14 @@ function Handler:apply_manual_range(context)
 
 	context.sub.primary_sid = combined_primary
 	context.sub.secondary_sid = combined_secondary
-	context.sub.start = self.manual_start
-	context.sub["end"] = self.manual_end
+	context.sub.start = effective_start
+	context.sub["end"] = effective_end
 	context.current_subtitle_text = combined_primary
 	context.first_subtitle = Collections.duplicate(collected[1])
 	context.last_subtitle = Collections.duplicate(collected[#collected])
 	context.expansion_occurred = #collected > 1
+
+	self:refresh_timing_overlay(effective_start, effective_end)
 end
 
 function Handler:perform_anki_save(_context, note_fields)
@@ -978,8 +1018,6 @@ function Handler:perform_anki_save(_context, note_fields)
 			else
 				msg.info("Note added successfully: " .. tostring(note_id))
 				Player.notify("Note added to Anki!", "success", 2)
-				self.manual_start = nil
-				self.manual_end = nil
 				self.deps.anki:gui_browse("nid:" .. tostring(note_id), function() end)
 			end
 		end
@@ -1014,9 +1052,6 @@ function Handler:handle_duplicate_note(note_fields, _error_msg)
 	end
 
 	msg.info("Duplicate search query: " .. query)
-
-	self.manual_start = nil
-	self.manual_end = nil
 
 	self.deps.anki:find_notes(query, function(note_ids, error)
 		if error or not note_ids or #note_ids == 0 then
