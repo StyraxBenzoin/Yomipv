@@ -373,15 +373,22 @@ function Monitor.get_adjacent_sub(target, direction)
 
 	local target_norm = normalize(target.primary_sid)
 
+	-- Prefer timestamp to avoid short-text substring false-matches
 	for i, sub in ipairs(history) do
-		local sub_norm = normalize(sub.primary_sid)
-		-- Check for match by time OR contained text
-		local time_match = math.abs(sub.start - target.start) < 0.1
-		local text_match = (sub_norm == target_norm) or (sub_norm:find(target_norm, 1, true))
-
-		if time_match or text_match then
+		if math.abs(sub.start - target.start) < 0.1 then
 			target_idx = i
 			break
+		end
+	end
+
+	-- Exact text fallback for when timestamps differ after a seek
+	if not target_idx then
+		for i, sub in ipairs(history) do
+			local sub_norm = normalize(sub.primary_sid)
+			if sub_norm == target_norm then
+				target_idx = i
+				break
+			end
 		end
 	end
 
