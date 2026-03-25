@@ -17,6 +17,13 @@ https://github.com/user-attachments/assets/8ff6f71a-c961-4da1-bf9f-b1b2c00143f8
 
 ## Installation
 
+### Recommended
+1. Download the [Zip](https://github.com/BrenoAqua/Yomipv/releases/download/v0.1.0/yomipv-v0.1.0.zip) from [latest release](github.com/BrenoAqua/Yomipv/releases/latest).
+2. Extract the contents directly into your MPV directory:
+    - Windows: `%APPDATA%/mpv/`
+    - Linux: `~/.config/mpv/`
+
+### Alternative
 1. **Clone the repository** to your MPV directory and install dependencies **(make sure you have Node.js installed)**:
    - Windows: `%APPDATA%/mpv/`
      ```
