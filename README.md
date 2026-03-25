@@ -34,14 +34,15 @@ https://github.com/user-attachments/assets/8ff6f71a-c961-4da1-bf9f-b1b2c00143f8
      ```
      git clone https://github.com/BrenoAqua/Yomipv && cp -rn Yomipv/* . && rm -rf Yomipv && cd scripts/yomipv/lookup-app && npm install
      ```
-3. **Configure Settings**:
-   - Open `script-opts/yomipv.conf` and update your Anki deck/note type names and field mappings.
-
-4. **External Services**:
-   - Ensure Anki is running with AnkiConnect enabled.
-   - Ensure Yomitan Api is running and the browser where the Yomitan extension is installed is open, and you have dictionaries installed.
 
 ## Usage
+
+**Configure Settings**:
+   - Open `script-opts/yomipv.conf` and update your Anki deck/note type names and field mappings.
+
+**External Services**:
+   - Ensure Anki is running with AnkiConnect enabled.
+   - Ensure Yomitan Api is running and the browser where the Yomitan extension is installed is open, and you have dictionaries installed.
 
 ### Basic Workflow
 
