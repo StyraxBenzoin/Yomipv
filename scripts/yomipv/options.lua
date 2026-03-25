@@ -146,6 +146,7 @@ local default_options = {
 	selector_trigger_mouse_idle_time = 5.0, -- Seconds mouse must be idle before movement triggers selector
 
 	-- Lookup
+	pre_tokenize = true, -- Pre-tokenize subtitles as they appear
 	selector_lookup_on_hover = false, -- Automatically show lookup on hover
 	selector_lookup_on_navigation = false, -- Automatically show lookup on navigation
 	selector_lookup_delay = 0.1, -- Delay in seconds before triggering lookup

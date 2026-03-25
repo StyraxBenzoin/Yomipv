@@ -65,7 +65,7 @@ handler.deps = {
 }
 
 history:set_exporter_handler(handler)
-Observer.init(Monitor)
+Observer.init(Monitor, yomitan, config)
 Observer.start()
 SecondarySid.init(config)
 SubtitleFilter.init(config)

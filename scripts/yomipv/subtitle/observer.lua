@@ -10,8 +10,10 @@ local Observer = {
 }
 
 -- Initialize subtitle observer state
-function Observer.init(monitor)
+function Observer.init(monitor, yomitan, config)
 	Observer.monitor = monitor
+	Observer.yomitan = yomitan
+	Observer.config = config
 end
 
 -- Shared handler for subtitle changes
@@ -46,6 +48,17 @@ function Observer.handle_subtitle_change(_name, _value)
 
 		if Observer.monitor.is_appending() then
 			Observer.monitor.append_recorded(sub_data)
+		end
+
+		-- Pre-tokenize in the background
+		if Observer.config and Observer.config.pre_tokenize and Observer.yomitan then
+			local StringOps = require("lib.string_ops")
+			local cleaned = StringOps.clean_subtitle(current_text)
+			if cleaned and cleaned ~= "" then
+				Observer.yomitan:tokenize(cleaned, function()
+					msg.info("Background tokenization complete for current subtitle")
+				end)
+			end
 		end
 	end)
 end
