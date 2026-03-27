@@ -59,7 +59,7 @@ local default_options = {
 	glossary_handlebar = "",
 
 	-- Highlighting
-	sentence_highlight_tag = '<span class="highlight">', -- HTML tag for selected term
+	sentence_highlight_tag = '<b>', -- HTML tag for selected term
 
 	-- HTML wrappers
 	primary_sentence_wrapper = '<span class="group">%s</span>',
