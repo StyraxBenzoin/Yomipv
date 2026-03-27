@@ -153,6 +153,7 @@ local default_options = {
 	selector_mora_hover = true, -- Lookup sub-words while hovering individual characters
 	selector_mora_navigation = false, -- Navigate through individual characters with arrow keys
 	lookup_show_frequencies = true,
+	lookup_show_pitch_accents = true,
 	prioritize_kanji_match = false, -- Prioritize entries with Kanji over match length
 
 	-- Typography

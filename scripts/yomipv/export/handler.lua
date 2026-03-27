@@ -832,6 +832,7 @@ function Handler:build_selector_style(update_range_fn, was_paused)
 				term = data.term,
 				reading = data.reading,
 				showFrequencies = self.config.lookup_show_frequencies,
+				showPitchAccents = self.config.lookup_show_pitch_accents,
 				prioritizeKanjiMatch = self.config.prioritize_kanji_match,
 			}
 			local json_body = require("mp.utils").format_json(data_to_send)
@@ -1113,7 +1114,6 @@ function Handler:perform_anki_save(context, note_fields)
 					local url = html:sub(s_idx, e_idx)
 					local pre = html:sub(math.max(1, s_idx - 150), s_idx - 1)
 					local post = html:sub(e_idx + 1, math.min(#html, e_idx + 150))
-					
 					local d_space = html:sub(math.max(1, s_idx - 5000), s_idx)
 					local dict_name = d_space:match('.*data%-dictionary="([^"]+)"') or ""
 

@@ -15,6 +15,7 @@ let currentDictionaryMedia = [];
 let lookupHistory = [];
 let currentAbortController = null;
 let currentPrioritizeKanjiMatch = false;
+let currentShowPitchAccents = true;
 
 const filterDictionaryStyles = (styleEl, dictName) => {
   if (!styleEl || !styleEl.sheet || !styleEl.sheet.cssRules || styleEl.sheet.cssRules.length === 0) return '';
@@ -113,7 +114,7 @@ const renderHeader = (term, reading, frequencies) => {
     e.preventDefault();
     if (lookupHistory.length > 0) {
       const prev = lookupHistory.pop();
-      performLookup(prev.term, prev.showFrequencies, true, prev.prioritizeKanjiMatch);
+      performLookup(prev.term, prev.showFrequencies, prev.showPitchAccents, true, prev.prioritizeKanjiMatch);
     }
   };
 };
@@ -189,7 +190,7 @@ const buildFrequencies = (entries, targetExpression, targetReading, showFrequenc
   return Array.from(allFrequenciesMap.values());
 };
 
-const renderEntry = (index, rawEntries, showFrequencies) => {
+const renderEntry = (index, rawEntries, showFrequencies, showPitchAccents) => {
   const entry = rawEntries[index];
   if (!entry) return;
 
@@ -197,17 +198,23 @@ const renderEntry = (index, rawEntries, showFrequencies) => {
   const term = fields.expression || '';
   let reading = fields.reading || '';
   const pitchAccents = fields['pitch-accents'] || '';
+  const firstPitch = fields['pitch-accent-categories'] || '';
 
-  if (pitchAccents) {
+  if (showPitchAccents && pitchAccents) {
     const tempPitch = document.createElement('div');
     tempPitch.innerHTML = pitchAccents;
-    const firstPitch = tempPitch.querySelector('li');
-    if (firstPitch) reading = firstPitch.innerHTML;
+    const firstPitchEl = tempPitch.querySelector('li');
+    if (firstPitchEl) reading = firstPitchEl.innerHTML;
   }
 
   const frequencies = buildFrequencies(rawEntries, fields.expression, fields.reading, showFrequencies);
   renderHeader(term, reading, frequencies);
-  applyPitchColor(fields['pitch-accent-categories'] || '');
+  
+  if (showPitchAccents) {
+    applyPitchColor(firstPitch);
+  } else {
+    headerEl.style.removeProperty('--pitch-accent-color');
+  }
 
   if (fields.glossary || fields.definition) {
     let content = fields.glossary || fields.definition;
@@ -321,7 +328,7 @@ const sendSelectedDict = (el) => {
   ipcRenderer.send('dictionary-selected', dictContent);
 };
 
-const performLookup = async (term, showFrequencies, isBack = false, prioritizeKanjiMatch) => {
+const performLookup = async (term, showFrequencies, showPitchAccents, isBack = false, prioritizeKanjiMatch) => {
   console.log('[UI] Performing lookup for:', term);
   
   const container = document.getElementById('lookup-container');
@@ -355,10 +362,11 @@ const performLookup = async (term, showFrequencies, isBack = false, prioritizeKa
 
   // Save current term to history if not going back
   if (!isBack && currentTerm && currentTerm !== term) {
-    lookupHistory.push({ term: currentTerm, showFrequencies: currentShowFrequencies, prioritizeKanjiMatch: currentPrioritizeKanjiMatch });
+    lookupHistory.push({ term: currentTerm, showFrequencies: currentShowFrequencies, showPitchAccents: currentShowPitchAccents, prioritizeKanjiMatch: currentPrioritizeKanjiMatch });
   }
 
   currentShowFrequencies = showFrequencies || false;
+  currentShowPitchAccents = showPitchAccents !== undefined ? showPitchAccents : true;
   currentPrioritizeKanjiMatch = prioritizeKanjiMatch !== undefined ? prioritizeKanjiMatch : false;
 
   // Show transition screen only for non-subword transitions
@@ -399,7 +407,8 @@ const performLookup = async (term, showFrequencies, isBack = false, prioritizeKa
             markers: [
               'glossary', 'expression', 'reading',
               'pitch-accent-categories', 'pitch-accents',
-              ...(showFrequencies ? ['frequencies'] : [])
+              ...(showFrequencies ? ['frequencies'] : []),
+              ...(showPitchAccents ? ['pitch-accents', 'pitch-accent-categories'] : [])
             ],
             includeMedia: true
           })
@@ -488,7 +497,7 @@ const performLookup = async (term, showFrequencies, isBack = false, prioritizeKa
 
     allEntries = sorted;
     currentEntryIndex = 0;
-    renderEntry(currentEntryIndex, allEntries, currentShowFrequencies);
+    renderEntry(currentEntryIndex, allEntries, currentShowFrequencies, currentShowPitchAccents);
 
     if (signal.aborted) return;
 
@@ -546,7 +555,7 @@ const performLookup = async (term, showFrequencies, isBack = false, prioritizeKa
 ipcRenderer.on('lookup-term', async (event, data) => {
   console.log('[IPC] Received lookup data:', JSON.stringify(data));
   lookupHistory = [];
-  performLookup(data.term, data.showFrequencies, false, data.prioritizeKanjiMatch);
+  performLookup(data.term, data.showFrequencies, data.showPitchAccents, false, data.prioritizeKanjiMatch);
 });
 
 ipcRenderer.on('window-hide-request', () => {
@@ -575,13 +584,13 @@ ipcRenderer.on('window-hide-request', () => {
 entryPrev.addEventListener('click', () => {
   if (allEntries.length === 0) return;
   currentEntryIndex = (currentEntryIndex - 1 + allEntries.length) % allEntries.length;
-  renderEntry(currentEntryIndex, allEntries, currentShowFrequencies);
+  renderEntry(currentEntryIndex, allEntries, currentShowFrequencies, currentShowPitchAccents);
 });
 
 entryNext.addEventListener('click', () => {
   if (allEntries.length === 0) return;
   currentEntryIndex = (currentEntryIndex + 1) % allEntries.length;
-  renderEntry(currentEntryIndex, allEntries, currentShowFrequencies);
+  renderEntry(currentEntryIndex, allEntries, currentShowFrequencies, currentShowPitchAccents);
 });
 
 let selectionTimeout;

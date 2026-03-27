@@ -179,7 +179,6 @@ function Monitor.add_to_history(subtitle)
 	if previous_entry then
 		-- Normalize for comparison
 		local norm_prev = normalize(previous_entry.secondary_sid)
-		local norm_curr = normalize(secondary)
 		local has_secondary = (secondary ~= "")
 
 		-- Check for reappearing event
@@ -222,7 +221,7 @@ function Monitor.add_to_history(subtitle)
 					if not norm_existing:find(norm_new, 1, true) then
 						previous_entry.primary_sid = previous_entry.primary_sid .. "\n" .. primary
 					end
-					
+
 					local to_append = ""
 					local norm_existing_sec = normalize(previous_entry.secondary_sid)
 					for sub_line in secondary:gmatch("[^\r\n]+") do
@@ -232,7 +231,7 @@ function Monitor.add_to_history(subtitle)
 					end
 					previous_entry.secondary_sid = previous_entry.secondary_sid .. to_append
 					previous_entry.secondary_end = math.max(previous_entry.secondary_end or 0, subtitle.secondary_end or 0)
-					
+
 					previous_entry["end"] = subtitle["end"] or previous_entry["end"]
 					return
 				end
