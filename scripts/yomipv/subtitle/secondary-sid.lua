@@ -95,26 +95,51 @@ function SecondarySid.select_secondary_track()
 		return
 	end
 
+	local sub_lang_opt = SecondarySid._config.secondary_sub_lang
+	if not sub_lang_opt or sub_lang_opt == "" then
+		msg.info("Secondary subtitle auto-selection disabled (secondary_sub_lang empty)")
+		mp.set_property("secondary-sid", "no")
+		return
+	end
+
+	local requested_langs = {}
+	for s in string.gmatch(sub_lang_opt, "([^,]+)") do
+		table.insert(requested_langs, (s:lower():gsub("^%s+", ""):gsub("%s+$", "")))
+	end
+
 	for _, track in ipairs(tracks) do
 		if track.type == "sub" and track.id ~= current_sid then
-			msg.info("Auto-selecting secondary subtitle: " .. track.id .. " (" .. (track.lang or "unknown") .. ")")
+			local lang = (track.lang or ""):lower()
+			local title = (track.title or ""):lower()
+			local match = false
 
-			last_sid = tostring(track.id)
-			mp.set_property("secondary-sid", last_sid)
-
-			if SecondarySid._config.secondary_on_hover then
-				mp.set_property_native("secondary-sub-visibility", is_hovering)
-				if is_hovering then
-					mp.set_property_number("secondary-sub-pos", 10)
+			for _, pattern in ipairs(requested_langs) do
+				if lang == pattern or title:find(pattern, 1, true) then
+					match = true
+					break
 				end
-			else
-				mp.set_property_native("secondary-sub-visibility", true)
 			end
-			return
+
+			if match then
+				msg.info("Auto-selecting secondary subtitle: " .. track.id .. " (" .. (track.lang or "unknown") .. ")")
+
+				last_sid = tostring(track.id)
+				mp.set_property("secondary-sid", last_sid)
+
+				if SecondarySid._config.secondary_on_hover then
+					mp.set_property_native("secondary-sub-visibility", is_hovering)
+					if is_hovering then
+						mp.set_property_number("secondary-sub-pos", 10)
+					end
+				else
+					mp.set_property_native("secondary-sub-visibility", true)
+				end
+				return
+			end
 		end
 	end
 
-	msg.warn("No suitable secondary subtitle found")
+	msg.warn("No suitable secondary subtitle found matching: " .. sub_lang_opt)
 	mp.set_property("secondary-sid", "no")
 end
 
