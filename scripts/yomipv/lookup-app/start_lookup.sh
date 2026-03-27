@@ -17,7 +17,7 @@ echo "MPV PID: $MPV_PID" >> "$LOG_FILE"
 LOOKUP_APP_BIN="$SCRIPT_DIR/node_modules/.bin/electron"
 
 if [ ! -f "$LOOKUP_APP_BIN" ]; then
-    echo "[ERROR] Lookup App binary not found at $LOOKUP_APP_BIN" >> "$LOG_FILE"
+    echo "[ERROR] Lookup App binary not found at $LOOKUP_APP_BIN. Please run 'npm install' inside the lookup-app directory." >> "$LOG_FILE"
     exit 1
 fi
 

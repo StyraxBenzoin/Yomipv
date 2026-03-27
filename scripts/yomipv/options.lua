@@ -10,6 +10,9 @@ local default_options = {
 	ankiconnect_url = "127.0.0.1:8765",
 	ankiconnect_api_key = "",
 
+	-- Anki DB build settings
+	ankidb_fields = "word Word expression Expression",
+
 	-- Deck and Note type
 	deck = "Senren",
 	note_type = "Senren",
@@ -139,6 +142,8 @@ local default_options = {
 	--[[ Selector settings ]]
 
 	-- Behavior
+	substitute_mpv_subtitles = false,
+	key_toggle_substitute = "S", -- Replace MPV subtitles with colorized subs
 	selector_show_history = true, -- Include recent lines in selector view
 	selector_hide_ui = true, -- Hide player UI while selector is active
 	selector_navigation_delay = 0.05, -- Input delay between repeated navigation actions
@@ -162,6 +167,7 @@ local default_options = {
 	selector_line_height = 1.25,
 
 	-- Appearance
+	selector_colorize_words = false, -- Color words based on Anki state and interval
 	selector_color = "#FFFFFF",
 	selector_selection_color = "#56FF68",
 	selector_lock_color = "#FFD700",
@@ -192,6 +198,7 @@ local default_options = {
 	key_set_timing_start = "",
 	key_set_timing_end = "",
 	key_clear_timings = "",
+	key_build_ankidb = "B",
 	lookup_app_path = "lookup-app",
 
 	--[[ History settings ]]

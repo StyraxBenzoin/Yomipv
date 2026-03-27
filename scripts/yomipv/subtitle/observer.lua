@@ -11,8 +11,9 @@ local Observer = {
 }
 
 -- Initialize subtitle observer state
-function Observer.init(monitor, yomitan, config)
-	Observer.monitor = monitor
+function Observer.init(handler, yomitan, config)
+	Observer.handler = handler
+	Observer.monitor = handler.deps.tracker
 	Observer.yomitan = yomitan
 	Observer.config = config
 
@@ -25,8 +26,31 @@ function Observer.init(monitor, yomitan, config)
 end
 
 -- Shared handler for subtitle changes
-function Observer.handle_subtitle_change(_name, _value)
-	-- Deferred capture to allow secondary subtitles to sync
+function Observer.handle_subtitle_change(name, value)
+	local text = value or ""
+	local StringOps = require("lib.string_ops")
+	local cleaned = StringOps.clean_subtitle(text, true)
+
+	-- Immediate display update for substitution mode
+	if Observer.config and Observer.config.substitute_mpv_subtitles and Observer.yomitan and name == "sub-text" then
+		if not cleaned or cleaned == "" then
+			if Observer.handler and Observer.handler.clear_passive then
+				Observer.handler:clear_passive()
+			end
+		else
+			Observer.yomitan:tokenize(cleaned, function(tokens)
+				-- Ensure this result still matches what's on screen
+				local current = mp.get_property("sub-text", "")
+				if tokens and current ~= "" and StringOps.clean_subtitle(current, true) == cleaned then
+					if Observer.handler and Observer.handler.on_current_tokens_ready then
+						Observer.handler:on_current_tokens_ready(tokens)
+					end
+				end
+			end)
+		end
+	end
+
+	-- Deferred capture to allow secondary subtitles to sync and avoid rapid changes
 	if Observer.capture_timer then
 		Observer.capture_timer:kill()
 	end
@@ -62,21 +86,19 @@ function Observer.handle_subtitle_change(_name, _value)
 			return
 		end
 
-		local StringOps = require("lib.string_ops")
-
-		-- Tokenize the current subtitle
-		local cleaned = StringOps.clean_subtitle(current_text)
-		if cleaned and cleaned ~= "" then
-			Observer.yomitan:tokenize(cleaned, function()
-				msg.info("Background tokenization complete for current subtitle")
+		-- Pre-tokenize based on the stable current text
+		local stable_cleaned = StringOps.clean_subtitle(current_text, true)
+		if stable_cleaned and stable_cleaned ~= "" then
+			Observer.yomitan:tokenize(stable_cleaned, function()
+				-- Already handled by immediate update if substitution is on
 			end)
 		end
 
-		-- Tokenize upcoming subtitles while this one is still on screen
+		-- Tokenize upcoming subtitles
 		local current_pos = mp.get_property_number("time-pos", 0)
 		local next_lines = Prefetcher.get_next_lines(current_pos, current_text, 2)
 		for _, line in ipairs(next_lines) do
-			local next_cleaned = StringOps.clean_subtitle(line)
+			local next_cleaned = StringOps.clean_subtitle(line, true)
 			if next_cleaned and next_cleaned ~= "" then
 				Observer.yomitan:tokenize(next_cleaned, function()
 					msg.info("Background prefetch tokenization complete for: " .. next_cleaned)

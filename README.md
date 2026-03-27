@@ -1,8 +1,8 @@
 # Yomipv
 
-Yomipv is a script that combines Yomitan with MPV to create Anki cards from Japanese media without leaving the player.
+Yomipv is a script that combines Yomitan with MPV to lookup words and create Anki cards from Japanese media without leaving the player and breaking immersion.
 There's no need to alt-tab between MPV and Yomitan while mining or doing word lookups.
-It was designed to be used with [Senren Note Type](https://github.com/BrenoAqua/Senren), but it should work with any note type.
+It was designed and pre-configured to be used with [Senren Note Type](https://github.com/BrenoAqua/Senren), but it should work with any note type.
 
 https://github.com/user-attachments/assets/8ff6f71a-c961-4da1-bf9f-b1b2c00143f8
 
@@ -17,8 +17,8 @@ https://github.com/user-attachments/assets/8ff6f71a-c961-4da1-bf9f-b1b2c00143f8
 
 ## Installation
 
-### Recommended (No Node.js Required)
-1. Download the [Windows Zip](https://github.com/BrenoAqua/Yomipv/releases/download/v0.2.1/win-yomipv-v0.2.1.zip) or [Linux Zip](https://github.com/BrenoAqua/Yomipv/releases/download/v0.2.1/linux-yomipv-v0.2.1.zip).
+### Recommended
+1. Download the [Windows Zip](https://github.com/BrenoAqua/Yomipv/releases/download/v0.2.1/win-yomipv-v0.2.1.zip) or [Linux Zip](https://github.com/BrenoAqua/Yomipv/releases/download/v0.2.1/linux-yomipv-v0.2.1.zip)
 2. Extract the contents directly into your MPV directory:
     - Windows: `%APPDATA%/mpv/`
     - Linux: `~/.config/mpv/`
@@ -38,11 +38,11 @@ https://github.com/user-attachments/assets/8ff6f71a-c961-4da1-bf9f-b1b2c00143f8
 ## Usage
 
 **Configure Settings**:
-   - Open `script-opts/yomipv.conf` and update your Anki deck/note type names and field mappings.
+   - Open `script-opts/yomipv.conf` and update your Anki deck/note type names and field mappings
 
 **External Services**:
-   - Ensure Anki is running with AnkiConnect enabled.
-   - Ensure Yomitan Api is running and the browser where the Yomitan extension is installed is open, and you have dictionaries installed.
+   - Ensure Anki is running with AnkiConnect enabled
+   - Ensure Yomitan Api is running and the browser where the Yomitan extension is installed is open, and you have dictionaries installed
 
 ### Basic Workflow
 
@@ -56,19 +56,30 @@ https://github.com/user-attachments/assets/8ff6f71a-c961-4da1-bf9f-b1b2c00143f8
 - **Append Mode (`Shift+C`)**: Select multiple subtitle lines before exporting
   - Press `Shift+C` to enter append mode, `c` to start the word selector, or `Shift+C` again to cancel
 
+- **Subtitle Substitution & Colorization (`S`)**: 
+  - Toggle between native MPV subtitles and Yomipv's colorized tokens
+  - Words are colorized based on their Anki card status (New, Learning, Review, Suspended) and intervals
+  - Enable `substitute_mpv_subtitles` in `yomipv.conf` to start with it enabled
+
+- **Secondary Subtitle**:
+  - Automatically select secondary subtitles based on preferred languages
+  - Configure `secondary_sub_lang` in `yomipv.conf`
+
 - **Mora-level Navigation**:
   - When `selector_mora_hover` is enabled, hovering over a word narrows the lookup to start from mora under your cursor instead of the full word
   - **`s`**: Toggle mora-level keyboard navigation (left/right moves by mora instead of word)
 
 - **Lookup App (`Ctrl+c`)**: Opens a popup window powered by your Yomitan dictionaries, showing definitions, pitch accents, and frequencies
-  - **Right-click** on the word in the selector to lock the lookup. It stays locked on the current word to avoid triggering another lookup when you move the cursor over other words
+  - **Right-click** on the word in the selector to lock the lookup
   - **Click any mora** in the header to narrow the lookup to a sub-word
-  - **Right-click the header** in the lookup to go back to the previous word
+  - **Right-click the header** to go back to the previous word
+  - **Pitch Accents**: Toggle `lookup_show_pitch_accents` in `yomipv.conf`
+  - **Frequencies**: Toggle `lookup_show_frequencies` in `yomipv.conf`
   - See [docs/lookup-app.md](docs/lookup-app.md) for full details
 
-- **Auto-Trigger Selector**:
+- **Auto-Trigger Selector (`z`)**:
   - Automatically open the selector by moving the mouse after it has been idle.
-  - Enable `selector_trigger_on_mouse_move` and customize `selector_trigger_mouse_idle_time` in `yomipv.conf`.
+  - Enable `selector_trigger_on_mouse_move` and customize `selector_trigger_mouse_idle_time` in `yomipv.conf`
 
 - **Manual Timing**:
   - **`q`** / **`w`**: Set a custom start/end time for audio and picture extraction
@@ -76,11 +87,15 @@ https://github.com/user-attachments/assets/8ff6f71a-c961-4da1-bf9f-b1b2c00143f8
   - **`e`**: Clear manual timings
 
 - **History Panel (`a`)**: Toggle subtitle history panel
-  - Click on previous/next lines to select them to expand the subtitle lines (when selector is open) or seek to that timestamp (when selector is closed)
+  - Click on previous/next lines to expand the subtitle lines (when selector is open)
+  - Seek to a specific subtitle's timestamp by clicking on it (when selector is closed)
+  - **`Alt+LEFT`** / **`Alt+RIGHT`**: Seek to the previous/next subtitle
 
 - **Auto-Updater (`U`)**: Keeps Yomipv updated to the latest version
-  - Press **`U`** in MPV or open **`yomipv-updater.bat`** directly to trigger the update
-  - Choose between official releases or latest source (main branch)
+  - Press **`U`** in MPV to trigger the update, or:
+    - On Windows: Run **`yomipv-updater.bat`** directly.
+    - On Linux: Run **`yomipv-updater.sh`** directly.
+  - Choose between latest official releases or latest source (main branch).
   - Automatically preserves user configuration in `script-opts/yomipv.conf`
   - Downloads platform-specific binaries for the Lookup App
   - (Source mode only) Updates dependencies for the Lookup App (requires Node.js)
@@ -93,5 +108,6 @@ https://github.com/user-attachments/assets/8ff6f71a-c961-4da1-bf9f-b1b2c00143f8
 - Check that curl is available at `C:\Windows\System32\curl.exe`
 
 ### Linux
-- Ensure `curl`, `unzip`, `grep`, and `sed` are installed (usually available by default).
-- If the lookup app fails to open, ensure the `.AppImage` in `scripts/yomipv/` has execution permissions.
+- Ensure `curl`, `unzip`, `grep`, and `sed` are installed
+- Ensure the updater script has execute permissions: `chmod +x yomipv-updater.sh`
+- For the lookup app, ensure the binary in `scripts/yomipv/` has execution permissions

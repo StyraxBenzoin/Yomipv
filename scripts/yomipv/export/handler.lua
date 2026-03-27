@@ -302,7 +302,7 @@ function Handler:open_selector(context, tokens, was_paused)
 		self:update_range_async(context, direction)
 	end
 
-	local selector_style = self:build_selector_style(update_range_fn, was_paused)
+	local selector_style = self:build_selector_style(update_range_fn, was_paused, tokens)
 
 	self.deps.selector:start(tokens, function(selected_token)
 		self:handle_selector_result(context, selected_token)
@@ -310,6 +310,7 @@ function Handler:open_selector(context, tokens, was_paused)
 end
 
 function Handler:handle_selector_result(context, selected_token)
+	msg.info("handle_selector_result: " .. (selected_token and "selected" or "cancelled"))
 	self.expand_to_subtitle = nil
 
 	if self.deps.history then
@@ -320,17 +321,25 @@ function Handler:handle_selector_result(context, selected_token)
 		end
 	end
 
+
+
 	if not selected_token then
 		msg.info("Selector cancelled")
 		self:refresh_timing_overlay()
+		if self.current_tokens then
+			self:on_current_tokens_ready(self.current_tokens)
+		end
 		return
 	end
 
 	if selected_token == "prev_sub" or selected_token == "next_sub" then
+		if self.current_tokens then
+			self:on_current_tokens_ready(self.current_tokens)
+		end
 		return
 	end
 
-	-- Clear manual timings immediately once selection is confirmed to prevent stale OSD/overlap
+	-- Clear manual timings to prevent stale OSD overlap
 	self.manual_start = nil
 	self.manual_end = nil
 	self:refresh_timing_overlay()
@@ -379,6 +388,12 @@ function Handler:handle_selector_result(context, selected_token)
 		headwords = selected_token.headwords,
 		reading = selected_token.reading
 	}
+
+	local AnkiDB = require("lib.anki_db")
+	AnkiDB.add_word(exact_text, "New", 0)
+	if self.current_tokens then
+		self:on_current_tokens_ready(self.current_tokens)
+	end
 
 	self.deps.yomitan:get_anki_fields(export_token.text, yomitan_fields, {
 		text = context.current_subtitle_text,
@@ -720,7 +735,7 @@ function Handler:update_range_async(context, direction, completion_callback)
 		Player.notify("Expanding...", "info", 1)
 
 		self.deps.yomitan:tokenize(
-			StringOps.clean_subtitle(adjacent_subtitle.primary_sid),
+			StringOps.clean_subtitle(adjacent_subtitle.primary_sid, true),
 			function(new_tokens, new_raw_content, expansion_error)
 				if expansion_error or not new_tokens then
 					Player.notify("Expansion failed", "error")
@@ -731,8 +746,8 @@ function Handler:update_range_async(context, direction, completion_callback)
 				context.raw_content = merge_raw_content(context.raw_content, new_raw_content, direction)
 				context.expansion_occurred = true
 
-				local cleaned_adjacent_sid = StringOps.clean_subtitle(adjacent_subtitle.primary_sid)
-				local cleaned_adjacent_secondary_sid = StringOps.clean_subtitle(adjacent_subtitle.secondary_sid)
+				local cleaned_adjacent_sid = StringOps.clean_subtitle(adjacent_subtitle.primary_sid, true)
+				local cleaned_adjacent_secondary_sid = StringOps.clean_subtitle(adjacent_subtitle.secondary_sid, true)
 
 				if context.current_subtitle_text:find(cleaned_adjacent_sid, 1, true) then
 					done()
@@ -771,7 +786,50 @@ function Handler:update_range_async(context, direction, completion_callback)
 	end)
 end
 
-function Handler:build_selector_style(update_range_fn, was_paused)
+function Handler:on_current_tokens_ready(tokens)
+	self.current_tokens = tokens
+	if not self.config.substitute_mpv_subtitles then
+		return
+	end
+
+	if self.deps.selector.active then
+		return
+	end
+
+	-- Hide standard subtitles to substitute with tokenized OSD
+	if mp.get_property("sub-visibility") == "yes" then
+		mp.set_property("sub-visibility", "no")
+	end
+
+	local style = self:build_selector_style(function() end, true, tokens)
+	self.deps.selector:display_passive(tokens, style)
+end
+
+function Handler:clear_passive()
+	self.current_tokens = nil
+	if not self.config.substitute_mpv_subtitles then
+		return
+	end
+	self.deps.selector:clear_passive()
+end
+
+function Handler:build_selector_style(update_range_fn, was_paused, tokens)
+	local word_colors
+	if self.config.selector_colorize_words and tokens then
+		local AnkiDB = require("lib.anki_db")
+		word_colors = {}
+		local color_count = 0
+		for i, token in ipairs(tokens) do
+			if token.headwords then
+				local color = AnkiDB.get_word_color(token.headwords)
+				if color then
+					word_colors[i] = color
+					color_count = color_count + 1
+				end
+			end
+		end
+		msg.info("handler: build_selector_style - found " .. color_count .. " word colors out of " .. #tokens .. " tokens")
+	end
 	return {
 		font_size = self.config.selector_font_size,
 		font_name = self.config.selector_font_name,
@@ -855,6 +913,7 @@ function Handler:build_selector_style(update_range_fn, was_paused)
 				},
 			}, function() end)
 		end,
+		word_colors = word_colors,
 		should_resume = not was_paused,
 	}
 end
@@ -993,10 +1052,33 @@ function Handler:new()
 		manual_start = nil,
 		manual_end = nil,
 		timing_overlay = mp.create_osd_overlay("ass-events"),
+		current_tokens = nil,
 	}
 	setmetatable(obj, self)
 	self.__index = self
 	return obj
+end
+
+function Handler:init()
+	if self.config.substitute_mpv_subtitles then
+		mp.set_property("sub-visibility", "no")
+	end
+end
+
+function Handler:toggle_substitute()
+	self.config.substitute_mpv_subtitles = not self.config.substitute_mpv_subtitles
+	self.config.save("substitute_mpv_subtitles", self.config.substitute_mpv_subtitles)
+	if self.config.substitute_mpv_subtitles then
+		Player.notify("Substitution: Enabled", "info", 2)
+		mp.set_property("sub-visibility", "no")
+		if self.current_tokens then
+			self:on_current_tokens_ready(self.current_tokens)
+		end
+	else
+		Player.notify("Substitution: Disabled", "info", 2)
+		mp.set_property("sub-visibility", "yes")
+		self.deps.selector:clear_passive()
+	end
 end
 
 function Handler:set_manual_start()
@@ -1171,6 +1253,8 @@ function Handler:perform_anki_save(context, note_fields)
 
 	self:apply_yomitan_fields(note_fields, entry)
 	Player.notify("Saving to Anki...")
+
+
 
 	self.deps.anki:add_note(
 		self.config.deck,

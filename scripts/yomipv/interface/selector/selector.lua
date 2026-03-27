@@ -23,6 +23,7 @@ local Selector = {
 	lookup_locked = false,
 	locked_index = nil,
 	locked_mora_index = nil,
+	passive = false,
 }
 
 
@@ -102,17 +103,24 @@ end
 
 function Selector:clear()
 	self.active = false
+	self.passive = false
 	if self.input_timer then
 		self.input_timer:kill()
 		self.input_timer = nil
 	end
-	mp.unobserve_property(render_cb)
+	mp.unobserve_property("osd-width", "native", render_cb)
+	mp.unobserve_property("osd-height", "native", render_cb)
 	if self.lookup_timer then
 		self.lookup_timer:kill()
 		self.lookup_timer = nil
 	end
 	mp.set_osd_ass(0, 0, "")
-	mp.set_property("sub-visibility", self.sub_visibility_before)
+
+	if self.sub_visibility_before then
+		mp.set_property("sub-visibility", self.sub_visibility_before)
+		self.sub_visibility_before = nil
+	end
+
 	self.lookup_locked = false
 	self.locked_index = nil
 	self.locked_mora_index = nil
@@ -131,6 +139,24 @@ function Selector:clear()
 	if self.style.on_hide then
 		self.style.on_hide()
 	end
+end
+
+function Selector:display_passive(tokens, style)
+	if self.active then
+		return
+	end
+	self.passive = true
+	self.tokens = tokens
+	self.style = style or {}
+	self:render()
+end
+
+function Selector:clear_passive()
+	if self.active or not self.passive then
+		return
+	end
+	self.passive = false
+	mp.set_osd_ass(0, 0, "")
 end
 
 function Selector:expand_selection_to_match(expression, reading)
@@ -280,6 +306,7 @@ function Selector:start(tokens, callback, style)
 	if self.active then
 		return
 	end
+	self.passive = false
 	self.active = true
 	self.tokens = tokens
 	self.style = style or {}

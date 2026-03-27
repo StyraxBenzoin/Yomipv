@@ -37,7 +37,7 @@ function Renderer.measure_width(text, size, font, bold)
 end
 
 function Renderer.render(selector)
-	if not selector.active or not selector.tokens or #selector.tokens == 0 then
+	if (not selector.active and not selector.passive) or not selector.tokens or #selector.tokens == 0 then
 		return
 	end
 
@@ -172,7 +172,7 @@ function Renderer.render(selector)
 				)
 			)
 
-			if is_partially_selected then
+			if not selector.passive and is_partially_selected then
 				local start_char = has_front_slice and selector.mora_index or 1
 				local end_char = nil
 				if has_back_slice then
@@ -194,10 +194,10 @@ function Renderer.render(selector)
 				if prefix ~= "" then osd:append(prefix) end
 				if colored ~= "" then osd:append(string.format("{\\1c&H%s&}%s{\\1c&H%s&}", sel_color, colored, main_color)) end
 				if suffix ~= "" then osd:append(suffix) end
-			elseif is_selected then
+			elseif not selector.passive and is_selected then
 				local sel_color = Display.fix_color(selector.style.selection_color or "00FFFF", "00FFFF")
 				osd:append(string.format("{\\1c&H%s&}%s{\\1c&H%s&}", sel_color, t_seg.visual_text, main_color))
-			elseif is_locked then
+			elseif not selector.passive and is_locked then
 				local lock_color = Display.fix_color(selector.style.selector_lock_color or "FFD700", "FFD700")
 				if selector.locked_mora_index and selector.locked_mora_index > 1 then
 					local term = t_seg.visual_text
@@ -210,7 +210,12 @@ function Renderer.render(selector)
 					osd:append(string.format("{\\1c&H%s&}%s{\\1c&H%s&}", lock_color, t_seg.visual_text, main_color))
 				end
 			else
-				osd:append(t_seg.visual_text)
+				local wc = selector.style.word_colors and selector.style.word_colors[t_seg.index]
+				if wc then
+					osd:append(string.format("{\\1c&H%s&}%s{\\1c&H%s&}", wc, t_seg.visual_text, main_color))
+				else
+					osd:append(t_seg.visual_text)
+				end
 			end
 
 			table.insert(selector.token_boxes, {
