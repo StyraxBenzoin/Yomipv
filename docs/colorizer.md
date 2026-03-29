@@ -11,6 +11,8 @@ The colorizer uses a dynamic color palette to represent different card states:
 - **Learning** (Orange to Yellow): Terms in the learning phase (up to 21 days)
 - **Review** (Green to Cyan): Mature/known terms (up to 2000 days)
 
+<img width="600" alt="gradient" src="https://github.com/user-attachments/assets/9df40f0d-3e16-4d4b-8282-748b0e08de81" />
+
 ## Configuration
 
 To enable and customize the colorizer, modify your `script-opts/yomipv.conf` file:
