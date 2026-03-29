@@ -69,7 +69,7 @@ function Get-Config {
     $conf_path = Join-Path $PSScriptRoot "script-opts\yomipv.conf"
     if (Test-Path $conf_path) {
         Get-Content $conf_path -Encoding UTF8 | ForEach-Object {
-            if ($_ -match '^\s*([^#\s=]+)\s*=\s*([^#]+)') {
+            if ($_ -match '^\s*([^#\s=]+)\s*=\s*([^#]*)') {
                 $conf[$matches[1]] = $matches[2].Trim()
             }
         }
@@ -83,23 +83,35 @@ function Merge-Config ($OldConfig) {
     if (Test-Path $conf_path) {
         Write-Host "Restoring user configuration settings..." -ForegroundColor Cyan
         $lines = Get-Content $conf_path -Raw -Encoding UTF8
-        $linesArray = $lines -split "`r`n|`n"
+        $linesArray = $lines -split "\r?\n"
+        $usedKeys = New-Object System.Collections.Generic.HashSet[string]([System.StringComparer]::OrdinalIgnoreCase)
+        
         for ($i = 0; $i -lt $linesArray.Count; $i++) {
-            if ($linesArray[$i] -match '^(\s*[^#\s=]+\s*=\s*)([^#]+)(.*)$') {
+            if ($linesArray[$i] -match '^(\s*#?\s*([^#\s=]+)\s*=\s*)([^#]*)(.*)$') {
                 $prefix = $matches[1]
-                $suffix = $matches[3]
-                $keyRegex = $linesArray[$i] -match '^\s*([^#\s=]+)'
-                if ($keyRegex) {
-                    $key = $matches[1]
-                    if ($OldConfig.ContainsKey($key)) {
-                        $val = $OldConfig[$key]
-                        $linesArray[$i] = "$prefix$val$suffix"
-                    }
+                $key = $matches[2]
+                $suffix = $matches[4]
+                
+                if ($OldConfig.ContainsKey($key) -and -not $usedKeys.Contains($key)) {
+                    $val = $OldConfig[$key]
+                    $newPrefix = $prefix -replace '^(\s*)#?\s*', '$1'
+                    $linesArray[$i] = "$newPrefix$val$suffix"
+                    $null = $usedKeys.Add($key)
                 }
             }
         }
+        
+        $newLines = New-Object System.Collections.Generic.List[string]
+        foreach ($line in $linesArray) { $null = $newLines.Add($line) }
+        
+        foreach ($key in $OldConfig.Keys) {
+            if (-not $usedKeys.Contains($key)) {
+                $null = $newLines.Add("$key=$($OldConfig[$key])")
+            }
+        }
+        
         $utf8NoBom = New-Object System.Text.UTF8Encoding $false
-        [System.IO.File]::WriteAllText($conf_path, ($linesArray -join "`n"), $utf8NoBom)
+        [System.IO.File]::WriteAllText($conf_path, ($newLines -join [Environment]::NewLine), $utf8NoBom)
     }
 }
 
@@ -286,6 +298,9 @@ try {
     
     Write-Host "Operation completed" -ForegroundColor Magenta
 } catch {
-    Write-Host $_.Exception.Message -ForegroundColor Red
+    Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+    Read-Host "Press Enter to exit..."
     exit 1
 }
+
+Read-Host "Press Enter to exit..."

@@ -47,9 +47,13 @@ merge_config() {
     if [ -n "$old_conf" ] && [ -f "$conf_file" ]; then
         echo -e "${CYAN}Restoring user configuration settings...${NC}"
         echo "$old_conf" | while IFS='=' read -r key value; do
-            if [ -n "$key" ] && grep -q "^\s*$key\s*=" "$conf_file"; then
-                local escaped_val=$(echo "$value" | sed 's/[&/\]/\\&/g')
-                sed -i "s|^\(\s*$key\s*=\s*\).*|\1$escaped_val|" "$conf_file"
+            if [ -n "$key" ]; then
+                if grep -q "^\s*#\?\s*$key\s*=" "$conf_file"; then
+                    local escaped_val=$(echo "$value" | sed 's/[&/\]/\\&/g')
+                    sed -i "0,/^\s*#\?\s*$key\s*=/ s|^\s*#\?\(\s*$key\s*=\s*\).*|\1$escaped_val|" "$conf_file"
+                else
+                    echo "$key=$value" >> "$conf_file"
+                fi
             fi
         done
     fi
