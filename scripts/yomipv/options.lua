@@ -74,6 +74,42 @@ local default_options = {
 	audio_template = "[sound:%s]",
 	image_template = '<img src="%s" class="yomipv-image">',
 
+	--[[ Picture settings ]]
+
+	picture_use_ffmpeg = true, -- Use FFmpeg instead of MPV for extraction
+	picture_timestamp_source = "subtitle_start", -- Capture timing: subtitle_start, current_position
+	picture_animated = false, -- Use animated image capture
+
+	-- Static screenshot settings
+	picture_static_format = "avif", -- Format: jpg, avif, webp
+	picture_static_quality = 85, -- Quality: 1-100
+	picture_static_width = 1080, -- Width or 0 to disable scaling
+	picture_static_offset = 0.0, -- Offset in seconds relative to subtitle start
+
+	-- Animated picture settings
+	animation_format = "avif", -- Format: webp, avif
+	animation_quality = 50, -- Quality: 1-100
+	animation_width = 720, -- Width or 0 to disable scaling
+	animation_fps = 10, -- Frames per second
+	animation_duration = "auto", -- Seconds or "auto" to match subtitle duration
+	animation_offset = 0.0, -- Offset in seconds relative to subtitle start
+	animation_end_offset = 0.0, -- Offset in seconds relative to subtitle end
+
+	-- Advanced codec settings
+	picture_webp_lossless = false,
+	picture_webp_compression = 6, -- Compression from 0 to 6
+	picture_avif_cpu_used = 4, -- CPU usage from 0 to 8
+
+	--[[ Audio clip settings ]]
+
+	audio_use_ffmpeg = true, -- Use FFmpeg instead of MPV for extraction
+	audio_format = "opus", -- Format: mp3, opus
+	audio_bitrate = "64k",
+	audio_offset = 0.0, -- Offset in seconds relative to subtitle start
+	audio_end_offset = 0.0, -- Offset in seconds relative to subtitle end
+	filename_show_ms = true, -- Include milliseconds in filenames
+	audio_match_volume = false, -- Match extracted audio volume to mpv volume
+
 	--[[ Misc info settings ]]
 
 	-- {name} Sanitized title
@@ -103,52 +139,19 @@ local default_options = {
 	-- {name}, {season}, {episode}, and {timestamp} can also be used with the note tag
 	note_tag = "アニメ",
 
-	--[[ Picture settings ]]
-
-	picture_use_ffmpeg = true, -- Use FFmpeg instead of MPV for extraction
-	picture_timestamp_source = "subtitle_start", -- Capture timing: subtitle_start, current_position
-	picture_animated = false, -- Use animated image capture
-
-	-- Static screenshot settings
-	picture_static_format = "avif", -- Format: jpg, avif, webp
-	picture_static_quality = 85, -- Quality: 1-100
-	picture_static_width = 1080, -- Width or 0 to disable scaling
-	picture_static_offset = 0.0, -- Offset in seconds relative to subtitle start
-
-	-- Animated picture settings
-	animation_format = "avif", -- Format: webp, avif
-	animation_quality = 50, -- Quality: 1-100
-	animation_width = 720, -- Width or 0 to disable scaling
-	animation_fps = 10, -- Frames per second
-	animation_duration = "auto", -- Seconds or "auto" to match subtitle duration
-	animation_offset = 0.0, -- Offset in seconds relative to subtitle start
-	animation_end_offset = 0.0, -- Offset in seconds relative to subtitle end
-
-	-- Advanced codec settings
-	picture_webp_lossless = false,
-	picture_webp_compression = 6, -- Compression from 0 to 6
-	picture_avif_cpu_used = 4, -- CPU usage from 0 to 8
-
-	--[[] Audio clip settings ]]
-
-	audio_use_ffmpeg = true, -- Use FFmpeg instead of MPV for extraction
-	audio_format = "opus", -- Format: mp3, opus
-	audio_bitrate = "64k",
-	audio_offset = 0.0, -- Offset in seconds relative to subtitle start
-	audio_end_offset = 0.0, -- Offset in seconds relative to subtitle end
-	filename_show_ms = true, -- Include milliseconds in filenames
-	audio_match_volume = false, -- Match extracted audio volume to mpv volume
-
 	--[[ Selector settings ]]
 
 	-- Behavior
 	substitute_mpv_subtitles = false,
-	key_toggle_substitute = "S", -- Replace MPV subtitles with colorized subs
 	selector_show_history = true, -- Include recent lines in selector view
 	selector_hide_ui = true, -- Hide player UI while selector is active
 	selector_navigation_delay = 0.05, -- Input delay between repeated navigation actions
 	selector_trigger_on_mouse_move = false, -- Automatically trigger selector on mouse movement after idle
 	selector_trigger_mouse_idle_time = 5.0, -- Seconds mouse must be idle before movement triggers selector
+
+	-- Colorizer
+	selector_colorize_words = false,
+	selector_colorize_underline = false,
 
 	-- Lookup
 	pre_tokenize = true, -- Pre-tokenize subtitles as they appear
@@ -167,20 +170,25 @@ local default_options = {
 	selector_line_height = 1.25,
 
 	-- Appearance
-	selector_colorize_words = false, -- Color words based on Anki state and interval
+	selector_selection_underline = false,
+	selector_underline_thickness = 4,
+	selector_underline_offset = -1,
+	selector_border_size = 2,
+	selector_shadow_offset = 0,
+
+	-- Colors
 	selector_color = "#FFFFFF",
 	selector_selection_color = "#56FF68",
 	selector_lock_color = "#FFD700",
 	selector_border_color = "#000000",
-	selector_border_size = 2,
 	selector_shadow_color = "#000000",
-	selector_shadow_offset = 0,
-
+	
 	-- Layout
 	selector_pos_y = 100,
 	selector_max_width_factor = 0.9, -- Max text block width relative to OSD width
 
 	-- Keybindings
+	key_toggle_substitute = "S",
 	key_open_selector = "c",
 	key_selector_confirm = "ENTER,c",
 	key_selector_cancel = "ESC",
@@ -188,17 +196,19 @@ local default_options = {
 	key_selector_right = "RIGHT",
 	key_selector_up = "UP",
 	key_selector_down = "DOWN",
-	key_toggle_picture_animated = "g",
 	key_expand_prev = "Shift+LEFT",
 	key_expand_next = "Shift+RIGHT",
 	key_selector_lookup = "Ctrl+c",
 	key_toggle_mora_navigation = "s",
 	key_toggle_selector_trigger_on_mouse_move = "z",
 	key_append_mode = "C",
-	key_set_timing_start = "",
-	key_set_timing_end = "",
-	key_clear_timings = "",
+	key_set_timing_start = "q",
+	key_set_timing_end = "w",
+	key_clear_timings = "e",
 	key_build_ankidb = "B",
+	key_toggle_picture_animated = "g",
+
+	-- Misc
 	lookup_app_path = "lookup-app",
 
 	--[[ History settings ]]
