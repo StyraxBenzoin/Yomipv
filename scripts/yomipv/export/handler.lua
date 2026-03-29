@@ -912,6 +912,7 @@ function Handler:build_selector_style(update_range_fn, was_paused, tokens)
 				showFrequencies = self.config.lookup_show_frequencies,
 				showPitchAccents = self.config.lookup_show_pitch_accents,
 				prioritizeKanjiMatch = self.config.prioritize_kanji_match,
+				prioritizeHiraganaMatch = self.config.prioritize_hiragana_match,
 			}
 			local json_body = require("mp.utils").format_json(data_to_send)
 			Curl.post("http://127.0.0.1:19634", json_body, function() end)

@@ -108,7 +108,7 @@ function FFmpegEncoder.generate_audio_args(config, source, output, start_time, e
 		"-y",
 	}
 
-	local start_time = start_time or 0
+	start_time = start_time or 0
 	local lead_in = 10
 	local jump = math.max(0, start_time - lead_in)
 	local sweep = start_time - jump

@@ -163,6 +163,7 @@ local default_options = {
 	lookup_show_frequencies = true,
 	lookup_show_pitch_accents = true,
 	prioritize_kanji_match = false, -- Prioritize entries with Kanji over match length
+	prioritize_hiragana_match = false, -- Prioritize hiragana-only entries when term is hiragana-only
 
 	-- Typography
 	selector_font_name = "", -- Fallback to mpv sub-font if unset
@@ -182,7 +183,7 @@ local default_options = {
 	selector_lock_color = "#FFD700",
 	selector_border_color = "#000000",
 	selector_shadow_color = "#000000",
-	
+
 	-- Layout
 	selector_pos_y = 100,
 	selector_max_width_factor = 0.9, -- Max text block width relative to OSD width

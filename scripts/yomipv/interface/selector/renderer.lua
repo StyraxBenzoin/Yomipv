@@ -307,7 +307,19 @@ function Renderer.render(selector)
 		osd:shadow(0)
 		osd:append(string.format("{\\3c&H%s&}", border_color))
 		osd:append("{\\p1}")
-		osd:append(string.format("m %d %d l %d %d %d %d %d %d", u.x, u.y, u.x + u.w, u.y, u.x + u.w, u.y + u_thickness, u.x, u.y + u_thickness))
+		osd:append(
+			string.format(
+				"m %d %d l %d %d %d %d %d %d",
+				u.x,
+				u.y,
+				u.x + u.w,
+				u.y,
+				u.x + u.w,
+				u.y + u_thickness,
+				u.x,
+				u.y + u_thickness
+			)
+		)
 		osd:append("{\\p0}")
 	end
 
