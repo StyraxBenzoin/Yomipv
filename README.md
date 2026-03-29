@@ -97,9 +97,9 @@ https://github.com/user-attachments/assets/8ff6f71a-c961-4da1-bf9f-b1b2c00143f8
 
 - **Auto-Updater (`U`)**: Keeps Yomipv updated to the latest version
   - Press **`U`** in MPV to trigger the update, or:
-    - On Windows: Run **`yomipv-updater.bat`** directly.
-    - On Linux: Run **`yomipv-updater.sh`** directly.
-  - Choose between latest official releases or latest source (main branch).
+    - On Windows: Run **`yomipv-updater.bat`** directly
+    - On Linux: Run **`yomipv-updater.sh`** directly
+  - Choose between latest official releases or latest source (main branch)
   - Automatically preserves user configuration in `script-opts/yomipv.conf`
   - Downloads platform-specific binaries for the Lookup App
   - (Source mode only) Updates dependencies for the Lookup App (requires Node.js)

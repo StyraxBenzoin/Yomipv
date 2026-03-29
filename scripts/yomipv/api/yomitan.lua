@@ -410,12 +410,12 @@ function Yomitan:get_anki_fields(term, markers, context, callback, active_expres
 					score = score + (matched * 1000)
 
 					-- Kanji priority
-					if expr ~= reading then
+					if expr ~= reading and reading ~= "" then
 						score = score + 100
 					end
 				else
 					-- Kanji priority
-					if expr ~= reading then
+					if expr ~= reading and reading ~= "" then
 						score = score + 100
 					end
 

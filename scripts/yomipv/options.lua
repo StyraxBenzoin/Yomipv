@@ -164,6 +164,7 @@ local default_options = {
 	lookup_show_pitch_accents = true,
 	prioritize_kanji_match = false, -- Prioritize entries with Kanji over match length
 	prioritize_hiragana_match = false, -- Prioritize hiragana-only entries when term is hiragana-only
+	lookup_theme = "dark", -- "dark" or "light"
 
 	-- Typography
 	selector_font_name = "", -- Fallback to mpv sub-font if unset

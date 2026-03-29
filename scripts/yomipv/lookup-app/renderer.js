@@ -106,7 +106,7 @@ const renderHeader = (term, reading, frequencies) => {
       if (subTerm && subTerm !== cleanTerm) {
         console.log('[UI] Sending sync-selection for header click:', subTerm);
         ipcRenderer.send('sync-selection-hint', subTerm);
-        performLookup(subTerm, currentShowFrequencies, false, currentPrioritizeKanjiMatch);
+        performLookup(subTerm, currentShowFrequencies, currentShowPitchAccents, false, currentPrioritizeKanjiMatch, currentPrioritizeHiraganaMatch);
       }
     };
   });
@@ -543,8 +543,8 @@ const performLookup = async (term, showFrequencies, showPitchAccents, isBack = f
         if (lenA !== lenB) return lenB - lenA;
 
         // Kanji priority
-        const kanjiA = (exprA && exprA !== fa.reading) ? 1 : 0;
-        const kanjiB = (exprB && exprB !== fb.reading) ? 1 : 0;
+        const kanjiA = (exprA && fa.reading && exprA !== fa.reading) ? 1 : 0;
+        const kanjiB = (exprB && fb.reading && exprB !== fb.reading) ? 1 : 0;
         if (kanjiA !== kanjiB) return kanjiB - kanjiA;
 
         return 0;
@@ -618,6 +618,13 @@ const performLookup = async (term, showFrequencies, showPitchAccents, isBack = f
 
 ipcRenderer.on('lookup-term', async (event, data) => {
   console.log('[IPC] Received lookup data:', JSON.stringify(data));
+  
+  if (data.theme === 'light') {
+    document.body.classList.add('light-theme');
+  } else {
+    document.body.classList.remove('light-theme');
+  }
+
   lookupHistory = [];
   performLookup(data.term, data.showFrequencies, data.showPitchAccents, false, data.prioritizeKanjiMatch, data.prioritizeHiraganaMatch);
 });
