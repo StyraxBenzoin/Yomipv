@@ -147,7 +147,10 @@ jobs:
             /repos/${{ github.repository }}/releases/generate-notes \
             -f tag_name=${{ github.ref_name }} | jq -r .body > release_body.md
           
-          # Append installation section
+          # Remove author attribution
+          sed -i 's/ by @BrenoAqua//g' release_body.md
+
+          # Append custom Installation section
           cat <<EOF >> release_body.md
 
           ---
