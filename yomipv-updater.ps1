@@ -159,6 +159,71 @@ function Read-KeyOrTimeout ($prompt, $key){
     return $response.ToString()
 }
 
+function Get-MpvInstances {
+    $instances = @()
+    try {
+        $processes = Get-CimInstance Win32_Process -Filter "name = 'mpv.exe'" -ErrorAction SilentlyContinue
+        foreach ($proc in $processes) {
+            if ($proc.CommandLine) {
+                $instances += @{
+                    CommandLine = $proc.CommandLine
+                    Executable = $proc.ExecutablePath
+                }
+            }
+        }
+    } catch {
+        Write-Host "Warning: Could not capture MPV command line arguments." -ForegroundColor Yellow
+    }
+    return $instances
+}
+
+function Stop-YomipvProcesses {
+    Write-Host "Checking for running Yomipv processes..." -ForegroundColor Cyan
+    
+    $lookupProcs = Get-Process "YomipvLookup" -ErrorAction SilentlyContinue
+    if ($lookupProcs) {
+        Write-Host "Stopping Yomipv Lookup App..." -ForegroundColor Yellow
+        $lookupProcs | Stop-Process -Force -ErrorAction SilentlyContinue
+    }
+
+    $mpvProcs = Get-Process "mpv" -ErrorAction SilentlyContinue
+    if ($mpvProcs) {
+        Write-Host "Stopping MPV instances..." -ForegroundColor Yellow
+        $mpvProcs | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 1
+    }
+}
+
+function Restart-MpvInstances ($instances) {
+    if ($null -eq $instances -or $instances.Count -eq 0) { return }
+    
+    Write-Host "Restarting MPV instances..." -ForegroundColor Cyan
+    foreach ($inst in $instances) {
+        try {
+            $cmd = $inst.CommandLine
+            $exe = $inst.Executable
+            
+            $p_exe = $null
+            $p_args = $null
+
+            if ($cmd -match '^"([^"]+)"\s*(.*)$') {
+                $p_exe = $matches[1]
+                $p_args = $matches[2]
+            } elseif ($cmd -match '^([^\s]+)\s*(.*)$') {
+                $p_exe = $matches[1]
+                $p_args = $matches[2]
+            }
+
+            if ($p_exe) {
+                $target = if ($exe -and (Test-Path $exe)) { $exe } else { $p_exe }
+                Start-Process -FilePath $target -ArgumentList $p_args
+            }
+        } catch {
+            Write-Host "Warning: Failed to restart an MPV instance." -ForegroundColor Yellow
+        }
+    }
+}
+
 function Update-Yomipv {
     if (Test-Path (Join-Path $PSScriptRoot ".git")) {
         Write-Host "Git repository detected. Updating via git..." -ForegroundColor Cyan
@@ -290,10 +355,14 @@ try {
     Test-PowershellVersion
     $global:progressPreference = 'silentlyContinue'
     
+    $mpvInstances = Get-MpvInstances
+    Stop-YomipvProcesses
+    
     $updated = Update-Yomipv
     if ($updated) {
         Update-Dependencies
-        Write-Host "Update installed! Please restart MPV to apply changes." -ForegroundColor Cyan
+        Restart-MpvInstances $mpvInstances
+        Write-Host "Update installed!" -ForegroundColor Cyan
     }
     
     Write-Host "Operation completed" -ForegroundColor Magenta
