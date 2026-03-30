@@ -81,6 +81,11 @@ https://github.com/user-attachments/assets/8ff6f71a-c961-4da1-bf9f-b1b2c00143f8
   - **Frequencies**: Toggle `lookup_show_frequencies` in `yomipv.conf`
   - See [docs/lookup-app.md](docs/lookup-app.md) for full details
 
+- **Persistent Mode (`v`)**: 
+  - Toggle persistent mode to export multiple words from a single subtitle selection without closing the selector
+  - Press **`v`** to toggle; the selection color changes to indicate it's active
+  - Confirming a selection exports the card but keeps the selector open for the next pick
+
 - **Auto-Trigger Selector (`z`)**:
   - Automatically open the selector by moving the mouse after it has been idle.
   - Enable `selector_trigger_on_mouse_move` and customize `selector_trigger_mouse_idle_time` in `yomipv.conf`
