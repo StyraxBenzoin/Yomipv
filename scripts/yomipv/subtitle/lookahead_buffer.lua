@@ -154,10 +154,11 @@ function LookaheadBuffer.get_next_lines(current_time, current_text, count)
 	end
 
 	local results = {}
+	local sub_delay = mp.get_property_number("sub-delay", 0)
 
 	for _, entry in ipairs(LookaheadBuffer._entries) do
 		-- Prevent duplication of currently displayed text
-		if entry.start_s > current_time and entry.text ~= current_text then
+		if (entry.start_s + sub_delay) > current_time and entry.text ~= current_text then
 			table.insert(results, entry.text)
 			if #results >= count then
 				break

@@ -63,17 +63,22 @@ function Observer.handle_subtitle_change(name, value)
 
 		local sub_start = mp.get_property_number("sub-start", 0)
 		local sub_end = mp.get_property_number("sub-end", 0)
+		local sub_delay = mp.get_property_number("sub-delay", 0)
+
 		local secondary_sid = mp.get_property("secondary-sub-text", "")
 		local secondary_sub_start = mp.get_property_number("secondary-sub-start", 0)
 		local secondary_sub_end = mp.get_property_number("secondary-sub-end", 0)
+		local secondary_sub_delay = mp.get_property_number("secondary-sub-delay", 0)
 
 		local sub_data = {
 			primary_sid = current_text,
 			secondary_sid = secondary_sid,
 			start = sub_start,
 			["end"] = sub_end,
+			delay = sub_delay,
 			secondary_start = secondary_sub_start,
 			secondary_end = secondary_sub_end,
+			secondary_delay = secondary_sub_delay,
 		}
 
 		Observer.monitor.add_to_history(sub_data)

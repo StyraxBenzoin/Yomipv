@@ -257,8 +257,10 @@ function Monitor.add_to_history(subtitle)
 		secondary_sid = secondary,
 		start = subtitle.start or 0,
 		["end"] = subtitle["end"] or 0,
+		delay = subtitle.delay or 0,
 		secondary_start = subtitle.secondary_start or 0,
 		secondary_end = subtitle.secondary_end or 0,
+		secondary_delay = subtitle.secondary_delay or 0,
 		timestamp = mp.get_time(),
 	})
 
@@ -280,6 +282,7 @@ function Monitor.set_to_current_sub()
 	local sub_text = mp.get_property("sub-text", "")
 	local sub_start = mp.get_property_number("sub-start", 0)
 	local sub_end = mp.get_property_number("sub-end", 0)
+	local sub_delay = mp.get_property_number("sub-delay", 0)
 
 	if sub_text and sub_text ~= "" then
 		Monitor.recorded = {
@@ -288,6 +291,7 @@ function Monitor.set_to_current_sub()
 				secondary_sid = mp.get_property("secondary-sub-text", ""),
 				start = sub_start,
 				["end"] = sub_end,
+				delay = sub_delay,
 			},
 		}
 		Monitor.appending = true
@@ -328,6 +332,7 @@ function Monitor.append_recorded(subtitle)
 		secondary_sid = subtitle.secondary_sid or "",
 		start = subtitle.start,
 		["end"] = subtitle["end"],
+		delay = subtitle.delay or 0,
 	})
 	msg.info("Appended subtitle to range: " .. subtitle.primary_sid)
 end
@@ -343,8 +348,11 @@ end
 function Monitor.export_current_session()
 	if Monitor.appending and #Monitor.recorded > 0 then
 		local combined_text = ""
-		local first_start = Monitor.recorded[1].start
-		local last_end = Monitor.recorded[#Monitor.recorded]["end"]
+		local first_sub = Monitor.recorded[1]
+		local last_sub = Monitor.recorded[#Monitor.recorded]
+
+		local first_start = first_sub.start + (first_sub.delay or 0)
+		local last_end = last_sub["end"] + (last_sub.delay or 0)
 
 		for i, sub in ipairs(Monitor.recorded) do
 			if i > 1 then
@@ -357,14 +365,18 @@ function Monitor.export_current_session()
 			primary_sid = combined_text,
 			start = first_start,
 			["end"] = last_end,
+			raw_start = first_sub.start,
+			raw_end = last_sub["end"],
 		}
 	end
 
 	local sub_text = mp.get_property("sub-text", "")
 	local sub_start = mp.get_property_number("sub-start", 0)
 	local sub_end = mp.get_property_number("sub-end", 0)
+	local sub_delay = mp.get_property_number("sub-delay", 0)
 
 	if sub_text and sub_text ~= "" then
+		local adjusted_start = sub_start + sub_delay
 		-- Use history for merged lines
 		local history = Monitor.get_history()
 		local sub_norm = normalize(sub_text)
@@ -372,16 +384,19 @@ function Monitor.export_current_session()
 			local entry = history[i]
 			local entry_norm = normalize(entry.primary_sid)
 			-- Match if time overlaps OR text is a substring (for mid-merge selection)
-			local time_match = math.abs(entry.start - sub_start) < 0.2
-			local time_overlap = (sub_start >= entry.start - 0.1) and (sub_start <= entry["end"] + 0.1)
+			local time_match = math.abs((entry.start + (entry.delay or 0)) - adjusted_start) < 0.2
+			local time_overlap = (adjusted_start >= (entry.start + (entry.delay or 0)) - 0.1)
+				and (adjusted_start <= (entry["end"] + (entry.delay or 0)) + 0.1)
 			local text_match = (entry_norm == sub_norm) or (entry_norm:find(sub_norm, 1, true))
 
 			if (time_match or time_overlap) and text_match then
 				return {
 					primary_sid = entry.primary_sid,
 					secondary_sid = entry.secondary_sid,
-					start = entry.start,
-					["end"] = entry["end"],
+					start = entry.start + (entry.delay or 0),
+					["end"] = entry["end"] + (entry.delay or 0),
+					raw_start = entry.start,
+					raw_end = entry["end"],
 				}
 			end
 		end
@@ -389,8 +404,10 @@ function Monitor.export_current_session()
 		return {
 			primary_sid = sub_text,
 			secondary_sid = mp.get_property("secondary-sub-text", ""),
-			start = sub_start,
-			["end"] = sub_end,
+			start = sub_start + sub_delay,
+			["end"] = sub_end + sub_delay,
+			raw_start = sub_start,
+			raw_end = sub_end,
 		}
 	end
 
@@ -410,7 +427,8 @@ function Monitor.get_adjacent_sub(target, direction)
 
 	-- Prefer timestamp to avoid short-text substring false-matches
 	for i, sub in ipairs(history) do
-		if math.abs(sub.start - target.start) < 0.1 then
+		local ref_start = target.raw_start or target.start
+		if math.abs(sub.start - ref_start) < 0.1 then
 			target_idx = i
 			break
 		end
